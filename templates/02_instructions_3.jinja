@@ -1,0 +1,38 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Algorithm') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        <p>
+            To choose which robots to send to Mars, NASA built an algorithm using pictures of robots like the ones
+            you've seen.
+        </p>
+
+        <p>
+        <div class="imgContainer">
+            <img src='{{ "../static/images/algorithm.png" }}' alt="Working of the algorithm"
+                 style='width: 57%; padding-top: 10px; padding-bottom: 10px; object-fit: contain'/>
+        </div>
+        </p>
+
+        <p>
+            <ul>
+                <li> Given a picture of a robot, the algorithm predicts <span class="txt-more">RELIABLE</span>, if the robot seems more likely to be
+                     reliable and <span class="txt-less">DEFECTIVE</span>, otherwise</li>
+                <li> Robots that receive <span class="txt-more">RELIABLE</span> are sent to Mars! </li>
+                <li> <b>NASA's algorithm has an accuracy of ~90%</b></li>
+            </ul>
+        </p>
+
+    </div>
+
+    <hr />
+
+    {% include 'includes/next_prev.jinja' %}
+
+</div>

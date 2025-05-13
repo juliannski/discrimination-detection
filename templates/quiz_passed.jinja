@@ -1,0 +1,26 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Congratulations!', color="green") }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+	    <p>
+		    Congratulations! You've completed all the training that you need.
+	    </p>
+
+	    <p>
+	        Click 'Next' to start the data familiarization stage.
+        </p>
+
+	</div>
+
+	<hr/>
+
+    {% include 'includes/next.jinja' %}
+
+</div>
+  </body>

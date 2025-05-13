@@ -1,0 +1,192 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% include 'includes/robot_guide.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Robot '+ (index|string) +"/"+(total|string), include_robot_guide=True) }}
+
+<div id="page-content">
+
+    <div class="instructions-white">
+        <p>
+            {% if params['probing_question'] == 'check_region' %}
+                Which company produced the robot below? <b>Click "Robot Guide" to see the sample robots again.</b>
+            {% elif params['probing_question'] == 'check_reliability' %}
+                If an engineer physically modified the {{ proxy }} on this robot, it would make the robot...
+            {% elif params['probing_question'] == 'check_determinism' %}
+                Is there a chance that the engineer's modification will not make any difference to the robot's reliability?
+            {% endif %}
+        </p>
+
+    </div>
+
+    <div class="instructions">
+
+        <p>
+            {% if params['probing_question'] == 'check_region' %}
+                <div class="center-on-page">
+                    <div class="img-robot">
+                    <img src='{{ "../" + robot.robot_url }}' alt="Robot 2"/>
+                    </div>
+                </div>
+            {% else %}
+                <div class="wrapper">
+                    <div class="imgContainer" style="padding-left: 5%; width: 50%;">
+                        <div class="img-robot">
+                        <img src='{{ "../" + robot.robot_url }}' alt="Robot 1"/>
+                        </div>
+                    </div>
+                    <div class="imgContainer" id="robot2" style="width: 50%; padding-right: 5%;">
+                        <div class="img-robot">
+                            <img src='{{ '../' + robot_pair.robot_url }}' alt="Robot 2"/>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </p>
+    </div>
+
+    </hr>
+
+    <center>
+        {% if params['probing_question'] == 'check_region' %}
+            <form action="{{ next_page }}" method="POST">
+                <input type="hidden" name="robot_guide_clicked" id="robot-guide-clicked" value="False">
+                <button type="submit" id="{{ robot.region_names[0] }}" name="region" value="{{ robot.region_names[0] }}"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-x" onclick="window.clickedNext=true;">{{ robot.region_names[0] }}</button>
+                <button type="submit" id="{{ robot.region_names[1] }}" name="region" value="{{ robot.region_names[1] }}"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-s" onclick="window.clickedNext=true;">{{ robot.region_names[1] }}</button>
+                <button type="button" class="btn btn-lg" id="ready-btn" style="margin-left: -200px;" disabled>{{ params['delay'] }} seconds left</button>
+                <button type="submit" id="Aidk" name="region" value="idk"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-idk" onclick="window.clickedNext=true;">I DON'T KNOW</button>
+            </form>
+        {% elif params['probing_question'] == 'check_reliability' %}
+            <form action="{{ next_page }}" method="POST">
+                <button type="submit" name="reliability" value="more" id="less"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-more" onclick="window.clickedNext=true;">MORE RELIABLE</button>
+                <button type="submit" name="reliability" value="less" id="more"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-less" onclick="window.clickedNext=true;">LESS RELIABLE</button>
+                <button type="button" class="btn btn-lg" id="ready-btn2" disabled>{{ params['delay'] }} seconds left</button>
+                <button type="submit" name="reliability" value="same" id="same"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-neutral" onclick="window.clickedNext=true;">NO EFFECT</button>
+                <button type="submit" name="reliability" value="idk" id="idk_reliability"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-idk" onclick="window.clickedNext=true;">I DON'T KNOW</button>
+            </form>
+        {% elif params['probing_question'] == 'check_determinism' %}
+            <form action="{{ next_page }}" method="POST">
+                <button type="submit" name="determinism" value="yes" id="yes"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-more" onclick="window.clickedNext=true;">YES</button>
+                <button type="submit" name="determinism" value="no" id="no"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-less" onclick="window.clickedNext=true;">NO</button>
+                <button type="button" class="btn btn-lg" id="ready-btn3" style="margin-left: -200px;" disabled>{{ params['delay'] }} seconds left</button>
+                <button type="submit" name="determinism" value="idk" id="idk_determinism"
+                        style="visibility:hidden"
+                        class="btn btn-primary btn-lg btn-idk" onclick="window.clickedNext=true;">I DON'T KNOW</button>
+            </form>
+        {% endif %}
+    </center>
+</div>
+
+<script>
+    let waitTime = parseInt("{{ params['delay'] }}");
+    {% if params['probing_question'] == 'check_region' %}
+        let readyButton = document.getElementById("ready-btn");
+        let A0button = document.getElementById("{{ robot.region_names[0] }}");
+        let A1button = document.getElementById("{{ robot.region_names[1] }}");
+        let AidkButton = document.getElementById("Aidk");
+
+        if (waitTime === 0) {
+            readyButton.classList.add("btn-success");
+            readyButton.removeAttribute("disabled");
+            readyButton.innerText = "I'm ready to answer";
+        } else {
+            let interval = setInterval(function() {
+                waitTime = waitTime - 0.1;
+                readyButton.innerText = Math.ceil(waitTime) + " seconds left";
+                if (waitTime < 0) {
+                    clearInterval(interval);
+                    readyButton.classList.add("btn-success");
+                    readyButton.removeAttribute("disabled");
+                    readyButton.innerText = "I'm ready to answer";
+                }
+            }, 100);
+        }
+
+        readyButton.addEventListener("click", function() {
+            A0button.style.visibility = "visible";
+            A1button.style.visibility = "visible";
+            AidkButton.style.visibility = "visible";
+            this.remove();
+        });
+    {% elif params['probing_question'] == 'check_reliability' %}
+        let readyButton2 = document.getElementById("ready-btn2");
+        let moreButton = document.getElementById("more");
+        let lessButton = document.getElementById("less");
+        let sameButton = document.getElementById("same");
+        let idkButton = document.getElementById("idk_reliability");
+
+        if (waitTime === 0) {
+            readyButton2.classList.add("btn-success");
+            readyButton2.removeAttribute("disabled");
+            readyButton2.innerText = "I'm ready to answer";
+        } else {
+            let interval = setInterval(function() {
+                waitTime = waitTime - 0.1;
+                readyButton2.innerText = Math.ceil(waitTime) + " seconds left";
+                if (waitTime < 0) {
+                    clearInterval(interval);
+                    readyButton2.classList.add("btn-success");
+                    readyButton2.removeAttribute("disabled");
+                    readyButton2.innerText = "I'm ready to answer";
+                }
+            }, 100);
+        }
+
+        readyButton2.addEventListener("click", function() {
+            moreButton.style.visibility = "visible";
+            lessButton.style.visibility = "visible";
+            sameButton.style.visibility = "visible";
+            idkButton.style.visibility = "visible";
+            this.remove();
+        });
+    {% elif params['probing_question'] == 'check_determinism' %}
+        let readyButton3 = document.getElementById("ready-btn3");
+        let yesButton = document.getElementById("yes");
+        let noButton = document.getElementById("no");
+        let idkButton2 = document.getElementById("idk_determinism");
+
+        if (waitTime === 0) {
+            readyButton3.classList.add("btn-success");
+            readyButton3.removeAttribute("disabled");
+            readyButton3.innerText = "I'm ready to answer";
+        } else {
+            let interval = setInterval(function() {
+                waitTime = waitTime - 0.1;
+                readyButton3.innerText = Math.ceil(waitTime) + " seconds left";
+                if (waitTime < 0) {
+                    clearInterval(interval);
+                    readyButton3.classList.add("btn-success");
+                    readyButton3.removeAttribute("disabled");
+                    readyButton3.innerText = "I'm ready to answer";
+                }
+            }, 100);
+        }
+
+        readyButton3.addEventListener("click", function() {
+            yesButton.style.visibility = "visible";
+            noButton.style.visibility = "visible";
+            idkButton2.style.visibility = "visible";
+            this.remove();
+        });
+    {% endif %}
+</script>
+</html>

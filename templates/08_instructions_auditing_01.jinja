@@ -1,0 +1,39 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% include 'includes/robot_guide.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+    <script>
+        setTimeout(function(){$('#robot2').fadeIn()}, 1000);//wait 5 sec
+    </script>
+</head>
+{{ macros.navigation_bar(page_title = 'Auditing', include_robot_guide=True) }}
+
+<div id="page-content">
+
+    <div class="instructions">
+        <p>
+            NASA will now show you the algorithm's predictions and explanations and ask you to determine if the algorithm
+            is fair or unfair.
+        </p>
+
+        <p>
+            <b>Important:  </b>
+            Each explanation shows a valid way to modify the algorithm's prediction.
+            {% if params['CE_method'] == 'random' %}
+                But there may be other ways to modify that prediction, and you may not see them.
+            {% else %}
+                The NASA legal team makes sure that you are shown the explanation with the {{ params['proxy'] }}, if there is such.
+            {% endif %}
+        </p>
+
+    <p>
+        Click 'Next' to start the testing stage and audit the algorithm. <b>Good luck!</b>
+    </p>
+
+    </div>
+
+	<hr/>
+
+    {% include 'includes/next.jinja' %}
+
+</div>

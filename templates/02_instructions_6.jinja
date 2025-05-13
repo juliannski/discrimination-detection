@@ -1,0 +1,45 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Explanations Quiz') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        <p>
+            Sometimes, the algorithm's explanation shows more than one image. In this case, each image highlights a different
+            set of changes that modify the prediction. Here, we present an explanation with 2 images.
+        </p>
+
+        <form id='customForm' action="" method="POST" role="form">
+            <div class="question">
+                <div class="imgContainer" style="padding-left: 105px;"><img src='{{ form.q.id }}' alt="Sth" style='width: 70%; object-fit: contain'/></div>
+            </div>
+            {% if message_neg %}
+                <center><p style="color: #c7254e; font-size: large"><b>{{ message_neg }}</b></p></center>
+            {% elif message_pos %}
+                <center><p style="color: #4cae4c; font-size: large"><b>{{ message_pos }}</b></p></center>
+            {% else %}
+                <center><p style="color: #31b0d5; font-size: large"><b>{{ form.q.label }}</b></p></center>
+            {% endif %}
+            <div class = "answer">
+                {{ form.q }}
+            </div>
+
+            {% if not(message_pos) %}
+                <br>
+                <center><input type="submit" value="Submit" class="btn btn-primary btn-lg continue"/></center>
+            {% endif %}
+        </form>
+
+    </div>
+
+    <hr />
+
+    {% if message_pos %}
+        {% include 'includes/next.jinja' %}
+    {% endif %}
+
+</div>

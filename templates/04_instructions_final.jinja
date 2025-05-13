@@ -1,0 +1,30 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Your Task') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        <p>
+            NASA is now concerned that their algorithm is <b>UNFAIR</b>! Your goal will be to decide if that is the case
+            for a number of predictions and their explanations.
+        </p>
+
+        <p>
+            <b>This is an important step!</b> If you can correctly determine the fairness of a prediction, it will increase your final bonus! Each correct choice gives you <b>${{ bonus_per_correct }}</b> in bonus!
+        </p>
+
+        <p>
+            Click 'Next' to take a comprehension quiz and get ready to help NASA.
+        </p>
+
+    </div>
+
+    <hr />
+
+    {% include 'includes/next.jinja' %}
+
+</div>

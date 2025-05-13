@@ -1,0 +1,366 @@
+---
+output:
+  pdf_document: 
+    keep_tex: yes
+    toc: false
+    number_sections: false
+    extra_dependencies:
+      colortbl: []
+      booktabs: []
+      grffile: ["space"]
+      flafter: []
+  header-includes: '\DeclareUnicodeCharacter{001B}{~}'
+
+geometry: margin=1in
+
+params:
+  venv_dir: '/Users/jskirzynski/.virtualenvs/py39arm/bin/python'
+  report_python_dir: '/Users/jskirzynski/Desktop/cxai/'
+  build_dir: '/Users/jskirzynski/Desktop/cxai/reports/'
+  #venv_dir: '/Users/berk/.virtualenvs/py39arm/bin/python'
+  #report_python_dir: '/Users/berk/Dropbox (Harvard University)/repos/cxai/'
+  report_data: 'results/01_10_25_results_medium_competing_trial/participant_5e0e1b8800a6bf000a694f79.results'
+  condition_params: NULL
+  define_conditions: NULL
+---
+
+```{=latex}
+\pagenumbering{gobble}
+\newcommand{\cell}[2]{\begin{tabular}{#1}#2\end{tabular}}
+```
+```{r r-setup, include = FALSE}
+
+packages = c('reticulate', 'tidyverse', 'janitor', 'xtable', 'knitr', 'kableExtra', 'lubridate', 'scales')
+for (pkg in packages) {
+  library(pkg, character.only = TRUE, warn.conflicts = FALSE, quietly = TRUE, verbose = FALSE)
+}
+
+# utils
+source(paste0(params$report_python_dir, "reporting/", "utils.R"))
+
+# load python virtual environment for reticulate
+use_python("/usr/local/bin/python3.9", required=T)
+
+# default options
+options(
+    dplyr.width = Inf, 
+    dplyr.print_max = 1e9,
+    stringsAsFactors = FALSE
+)
+
+# knitting options
+knitr::opts_chunk$set(
+    progress = TRUE, 
+    verbose = TRUE
+)
+    
+# chunk options 
+# see: https://bookdown.org/yihui/rmarkdown-cookbook/hide-one.html
+knitr::opts_chunk$set(
+    echo = FALSE,
+    warning = FALSE, 
+    fig.path = 'figure/' 
+)
+
+```
+
+```{python python-setup}
+import sys
+sys.path.append(r.params['report_python_dir'])
+import dill
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
+
+# pandas options
+pd.set_option('display.max_columns', None)
+
+# load data file
+f = Path(r.params['report_data'])
+if not f.exists():
+    f = Path(r.params['report_python_dir']) / f
+assert f.exists()
+
+with open(f, 'rb') as infile:
+    results = dill.load(infile)
+    
+```
+
+```{python preprocessing}
+
+# parameters
+parameters = results['experimental_parameters']
+n_total_robots = parameters['n_auditing']
+
+# pull data frames
+round_df = pd.DataFrame(results['round_df'])
+probing_df = pd.DataFrame(results['probing_df'])
+anchoring_df = pd.DataFrame(results['anchoring_df'])
+questionnaire_df = pd.DataFrame(results['questionnaire_df'])
+
+deployment_time = sum(round_df['prediction_time'])
+probing_time = sum(probing_df['prediction_time'])
+total_time = results['time']
+
+# information about the actual results
+info = {
+    'ID': results['participant_id'],
+    'Experiment Date': results['date'].strftime("%b-%d-%Y"),
+    'Bonus': results['bonus'],
+    #'Report Date': datetime.now().strftime("%b-%d-%Y"),
+    #'Results File': Path(r.params['report_data']).name,
+    #
+    "Condition": results['proxy_strength'] + "_CE_" + results['CE_method'],
+    "Proxy": results['proxy'],
+    "Proxy Strength": results['proxy_strength'],
+    "CE Sampling Method": results['CE_method'],
+    'Time Probing / Deployment / Total': "/".join([str(round(probing_time / 60, 2)), str(round(deployment_time / 60,2)), str(total_time)]),
+}
+
+info_df = pd.DataFrame.from_records([info]).transpose()
+```
+
+```{r info-table, include = FALSE}
+
+# create an xtable from a data.frame
+xt = xtable(py$info_df, align = c("l", "r"))
+
+# print the xtable as a string
+n_rows = nrow(py$info_df)
+xt_str = print.xtable(xt,
+                      type = "latex", 
+                      #tabular.environment = "tabular",
+                      booktabs = TRUE,
+                      floating = FALSE,
+                      include.rownames = TRUE,
+                      include.colnames = FALSE,
+                      NA.string="-",
+                      comment=FALSE,
+                      timestamp=FALSE,
+                      hline.after=NULL,
+                      add.to.row = list(
+                          pos=as.list(-1:n_rows), 
+                          command=c('\\toprule ','',rep('\\midrule ',n_rows-1),'\\bottomrule\n')
+                      ),
+                      sanitize.text.function = function(x){sanitize(x, type = "latex")},
+                      sanitize.rownames.function = function(x){paste0('{\\bfseries ', x, '}')},
+                      sanitize.colnames.function = function(x){paste0('{\\bfseries ', x, '}')}
+                      )
+```
+
+```{r data-processing, include = FALSE}
+# probing / deployment results
+probing_df = data.frame(py$probing_df) %>%
+    mutate(decision_id = row_number())
+
+round_df = data.frame(py$round_df) %>%
+    mutate(decision_id = row_number())
+
+timing_ub = 60
+
+compute_metrics <- function(df, lb, ub) {
+  met_df <- df %>%
+    mutate(true_fairness = case_when(
+      robot_delta < lb ~ "FAIR",
+      robot_delta >= ub ~ "UNFAIR",
+      TRUE ~ "ABSTAIN"
+    )) %>%
+    mutate(reliability = ifelse(judgement == true_fairness, 1, ifelse(true_fairness == "ABSTAIN", NA, 0)),
+           coverage = 1.0-ub + lb) %>%
+    mutate(mean_reliability = mean(reliability, na.rm=TRUE)) %>%
+    ungroup()
+  
+  return(met_df)
+}
+
+compute_metrics_protected <- function(df, lb, ub) {
+  met_df <- df %>%
+    mutate(true_fairness_protected = case_when(
+      robot_user_delta < lb ~ "FAIR",
+      robot_user_delta >= ub ~ "UNFAIR",
+      TRUE ~ "ABSTAIN"
+    )) %>%
+    mutate(reliability_protected = ifelse(judgement == true_fairness_protected, 1, ifelse(true_fairness_protected == "ABSTAIN", NA, 0)),
+           coverage_protected = 1.0-ub + lb) %>%
+    mutate(mean_reliability_protected = mean(reliability_protected, na.rm=TRUE)) %>%
+    ungroup()
+  
+  return(met_df)
+}
+
+bs <- seq(0, 0.5, by = 0.01)
+pid_metrics_list <- lapply(bs, function(b) {
+  compute_metrics(round_df, lb = b, ub = 1.0-b)
+})
+
+pid_metrics_list_protected <- lapply(bs, function(b) {
+  compute_metrics_protected(round_df, lb = b, ub = 1.0-b)
+})
+
+metrics_df_main <- bind_rows(pid_metrics_list)
+metrics_df_protected <- bind_rows(pid_metrics_list_protected) 
+metrics_df <- bind_rows(metrics_df_main, metrics_df_protected)
+```
+
+```{r threshold-processing, warning=FALSE, message=FALSE}
+compute_metrics <- function(df, threshold) {
+  met_df <- df %>%
+    mutate(true_fairness = case_when(
+      robot_delta < threshold ~ "FAIR",
+      robot_delta >= threshold ~ "UNFAIR",
+    )) %>%
+    mutate(reliability = ifelse(judgement == true_fairness, 1, 0),
+           "threshold" = threshold) %>%
+    mutate(mean_reliability = mean(reliability)) %>%
+    ungroup()
+  
+  return(met_df)
+}
+
+compute_metrics_protected <- function(df, threshold) {
+  met_df <- df %>%
+    mutate(true_fairness_protected = case_when(
+      robot_delta < threshold ~ "FAIR",
+      robot_delta >= threshold ~ "UNFAIR",
+    )) %>%
+    mutate(reliability_protected = ifelse(judgement == true_fairness_protected, 1, 0),
+           threshold_protected = threshold) %>%
+    mutate(mean_reliability_protected = mean(reliability_protected)) %>%
+    ungroup()
+  
+  return(met_df)
+}
+
+bs <- seq(0, 1.0, by = 0.01)
+pid_metrics_list <- lapply(bs, function(b) {
+  compute_metrics(round_df, threshold = b)
+})
+
+pid_metrics_list_protected <- lapply(bs, function(b) {
+  compute_metrics_protected(round_df, threshold = b)
+})
+
+metrics_df_main_threshold <- bind_rows(pid_metrics_list)
+metrics_df_protected_threshold <- bind_rows(pid_metrics_list_protected) 
+metrics_df_threshold <- bind_rows(metrics_df_main_threshold, metrics_df_protected_threshold)
+```
+
+```{r plotting-defaults, include = FALSE}
+
+decision_scale = scale_colour_manual(
+    values = c('abstain' = 'grey',  
+               'unfair' = 'red',  
+               'fair' = 'forestgreen')
+    )
+
+decision_shapes = scale_shape_manual(values = c(16,1))
+
+plot_theme = theme_bw() + 
+    theme(
+        plot.title = element_blank(),
+        legend.position = "top",
+        panel.border = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        axis.ticks = element_blank(), 
+    ) 
+
+
+overall_x_scale = scale_x_continuous(
+    name="Number of Predictions", 
+    limits = sort(1 - 2*bs, decreasing=FALSE), 
+    n.breaks=length(bs), 
+    minor_breaks = NULL)
+```
+
+
+```{=tex}
+\begin{table}[h]
+\small
+`r xt_str`
+\end{table}
+```
+
+
+```{r probing-time, out.width='100%'}
+
+p2 <- ggplot(probing_df, aes(x = decision_id, y = pmin(prediction_time, 55.0))) +
+    geom_line(alpha =0.5) +
+    geom_point(color = "blue", size=3) +
+    scale_x_continuous(name="Number of Predictions", n.breaks=nrow(py$probing_df)) +
+    scale_y_continuous(name="Seconds", limits = c(0, timing_ub)) + 
+    plot_theme +
+    theme(aspect.ratio=0.2)
+
+#grid.arrange(p, p2, ncol = 2)
+p2
+```
+
+
+```{r timing-overall, out.height='30%', out.width='100%'}
+p <- ggplot(round_df, aes(x = decision_id, y = pmin(prediction_time, 55.0))) +
+    geom_line(alpha = 0.5, color = "blue") +
+    geom_point(color = "blue", size=3) +
+    geom_rect(data = round_df[round_df$cf_exclusive_proxy, ],
+            aes(xmin = decision_id - 0.5, xmax = decision_id + 0.5,
+                ymin = -Inf, ymax = Inf),
+            fill = "yellow", alpha = 0.3, color = alpha("yellow", 0.03)) +
+    geom_text(aes(label = toupper(ifelse(judgement == "FAIR", "F",
+                                         ifelse(judgement == "ABSTAIN", "A", "U"))),
+                  color = judgement,
+                  y = Inf, vjust=1, color = "black"), size=5) +
+    scale_shape_manual(values = c(16,1)) +
+    scale_x_continuous(name="Number of Predictions", n.breaks=nrow(py$round_df)) +
+    scale_y_continuous(name="Seconds", limits = c(0, timing_ub)) + 
+    decision_scale + 
+    plot_theme +
+    theme(aspect.ratio=1/5) +
+    theme(legend.position = "none", axis.title.x = element_blank())
+
+p
+```
+
+
+```{r coverage-plot, out.height='30%', out.width='100%'}
+p <- ggplot(metrics_df, aes(x = coverage, y = mean_reliability)) +
+     geom_line(alpha = 0.5, color = "brown") +
+     geom_point(color = "brown", size=2) +
+     scale_x_continuous(name="Decision Boundary Coverage", n.breaks=5) +
+     scale_y_continuous(name="Reliability", limits = c(0, 1.0)) + 
+     plot_theme
+
+p
+```
+
+```{r threshold-plot, out.height='30%', out.width='100%'}
+p <- ggplot(metrics_df_threshold, aes(x = threshold, y = mean_reliability)) +
+     geom_line(alpha = 0.5, color = "brown") +
+     geom_point(color = "brown", size=2) +
+     scale_x_continuous(name="Fairness Threshold", n.breaks=5) +
+     scale_y_continuous(name="Reliability", limits = c(0, 1.0)) + 
+     plot_theme
+
+p
+```
+
+```{r questionnaire-table}
+
+df = data.frame(py$questionnaire_df) %>% 
+    mutate(
+        response = ifelse(response == "", "-", response),
+        response  = ifelse(question_type == "free", str_trunc(response, 50), response),
+        response  = ifelse(question_type == "structured", str_to_title(response), response),
+    )
+    
+kable_df = df %>%
+    select(QID = question_id, Question = question_text, Response = response)
+
+kt = kable_df %>% 
+    kable(format="latex",
+          position = "!t",
+          booktabs = TRUE, 
+          linesep = "",
+    ) %>%
+    kable_styling(latex_options="scale_down")
+```
+`r kt`

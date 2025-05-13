@@ -1,0 +1,55 @@
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+    <script type="text/javascript">
+    var hasNavigated = false;
+    function openwindow() {
+        popup = window.open('{{ starting_screen }}','Popup','toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=no,width='+1268+',height='+868+'');
+        document.getElementById("start").disabled = true;
+    }
+    var timer = setInterval(function() {
+        if(popup && popup.closed && !hasNavigated) {
+            clearInterval(timer);
+            window.location.replace("https://app.prolific.co/submissions/complete?cc=C8XE8PDK");
+        }
+    }, 500);
+
+    // Receive a message from the popup window
+    window.addEventListener('message', function(event) {
+      if (event.data === 'navigated') {
+        hasNavigated = true;
+      }
+    });
+    </script>
+</head>
+
+<div id="container-instructions">
+
+    <h1 style="margin-left: 12.5%;">Welcome</h1>
+
+    <hr style="max-width: 75%;"/>
+    <center>
+
+    <div class="instructions well" style="max-width: 75%; text-align: left;">
+
+        <p>
+            Thanks for <!--accepting our HIT and--> participating in our experiment! Click the button below to begin.
+        </p>
+        <p>
+            If you have waited over 60 seconds for the page to load, and still see the loading wheel in the popup, then
+            either your browser is incompatible or your internet connection is not fast enough. <!--Please release the HIT so someone else can take
+            the experiment.--> We apologize for the inconvenience.
+        </p>
+
+    </div>
+        </center>
+
+    <hr style="max-width: 75%;"/>
+
+    <center>
+        <button type="button" id="start" class="btn btn-primary btn-lg" onClick="openwindow();">
+            Start
+        </button>
+    </center>
+
+
+</div>

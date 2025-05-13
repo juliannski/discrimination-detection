@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% include 'includes/header.jinja' %}
+    <script type="text/javascript">
+      var closeButtonClicked = false;
+      function end() {
+          closeButtonClicked = true;
+          window.opener.location.replace("https://app.prolific.co/submissions/complete?cc=C1EPTL0Y");
+          window.opener.postMessage('navigated', '*');
+          window.close();
+      }
+    </script>
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Please Read Before You Proceed', include_exit=False) }}
+
+<div id="page-content">
+
+    <div class="instructions">
+
+            <!--<p class="block-text">This HIT is a psychology experiment. In order to consent to
+            participate, you MUST meet the following criteria:
+                <ul>
+                    <li>18 years of age or older.</li>
+                    <li>Fluent speaker of English.</li>
+                    <li>Have not participated in this experiment before. </li>
+                </ul>
+            </p>-->
+            <p class="block-text">
+                This app is a psychology experiment. It is designed to look at how people make decisions about the fairness
+                of machine learning models. It requires no prior knowledge. It will take about 20 minutes, and will pay
+                ${{ params['base_pay'] }} plus a performance-dependent bonus of up to ${{ params['bonus'] }}.
+            </p>
+
+            <!--<p>
+              This experiment is not designed for smartphones or tablets. If you use such a device, please switch to a
+              computer or release the HIT so someone else can take the experiment. We apologize for the inconvenience.
+            </p>-->
+
+            <p class="block-text">
+            Your participation in this experiment is voluntary. You may refrain from answering any questions that make
+            you uncomfortable. You may withdraw your participation at any time without penalty by clicking the Exit button. <!--returning the HIT on
+            MTurk. and emailing the experimenter at the address provided below.-->
+            </p>
+            <p class="block-text">
+            Other than monetary compensation, participating will provide no direct benefits to you.
+            </p>
+
+            <p class="block-text">
+            Your Prolific ID may be connected to individual responses. We will not be asking for any additional
+            personally-identifying information. We will handle responses as confidentially as possible. We cannot
+            however guarantee the confidentiality of information transmitted over the Internet. We will be keeping data
+            collected as part of this experiment indefinitely. If we publish the data, we will ensure that your Mturk
+            worker ID is removed from the data so that there is no possibility of identifying you from your data.
+            </p>
+
+            <!--<p class="block-text">
+                If you have any questions about the study, feel free to contact Julian Skirzynski. He can be reached at
+                [our lab e-mail account for experiments / my e-mail]
+            </p>-->
+
+            <p class="block-text">
+                By selecting the &quot;I consent&quot; option below, I acknowledge that
+                <ul>
+            <li><b>I read this consent form</b></li>
+                    <li><b>I am 18 years of age or older</b></li>
+                    <li><b>I agree to take part in the research</b></li>
+                    <li><b>I speak English fluently</b></li>
+                    <li><b>I have not participated in this experiment before.</b></li>
+                </ul>
+            </p>
+
+    </div>
+
+    <hr />
+
+        <div class="center-on-page">
+            <b style="font-size:x-large">Do you understand and consent to these terms?</b>
+        </div>
+        <br>
+        <div class="center-on-page">
+          <button type="button" class="btn btn-primary btn-lg"
+                  onclick='window.location.href="{{ url_for('pre_instructions')}}"'
+                  style = 'margin-right:10px'>
+            <span class="glyphicon glyphicon-ok"></span> I consent
+          </button>
+
+          <button type="button" class="btn btn-danger btn-lg" onclick="end()">
+            <span class="glyphicon glyphicon-ban-circle"></span> No thanks, I do not want to do this Experiment
+          </button>
+        </div>
+
+    </div>
+</html>

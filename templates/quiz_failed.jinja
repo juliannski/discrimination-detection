@@ -1,0 +1,31 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Quiz Failed', color="red") }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        <p>
+            It seems you answered one or more questions incorrectly.
+            Please read through the instructions and double-check your answers before submitting them again.
+            <b>Be careful. You can only take the quiz {{ remaining_attempts }} more {% if remaining_attempts == 1 %} time {% else %} times {% endif %} before NASA ends the study .</b>
+        </p>
+
+	</div>
+
+	<hr/>
+
+    <div class="instructionsnav">
+            <div class="col-xs-2">
+                <button type="button" id="next" value="next" class="btn btn-primary btn-lg continue"
+                 onclick='window.location.href="{{ next_page }}"'>
+                Return to Instructions <span class="glyphicon glyphicon-refresh"></span>
+                </button>
+            </div>
+    </div>
+
+</div>
+  </body>

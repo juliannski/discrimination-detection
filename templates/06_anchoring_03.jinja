@@ -1,0 +1,32 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% include 'includes/robot_guide.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Robot Guide', include_robot_guide=True) }}
+
+
+<div id="page-content">
+
+    <div class="instructions">
+
+        <p>
+            Since fairness can change robot-to-robot NASA needs a <b>fairness auditor</b>.
+        </p>
+
+        <p>
+            Once you click "Next" you'll label <b>{{ params['n_probing'] }} robots</b> to let NASA know which company
+            produced which robot and how reliable you think it is.
+        </p>
+
+        <p>
+            They will use this information to see if you can be their <b>fairness auditor.</b>
+            <b>You'll be able to access the Robot Guide via the button at the top for the remainder of the study. Good luck!</b>
+        </p>
+
+    <hr />
+    </div>
+
+    {% include 'includes/next.jinja' %}
+
+</div>

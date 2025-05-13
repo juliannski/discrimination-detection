@@ -1,0 +1,43 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'What to Expect') }}
+
+<div id="page-content">
+
+    <div class="instructions">
+        In this experiment, we are studying how people make decisions about which algorithms are fair and which are not
+        fair. You do not need any prior knowledge to take part in this study. We will provide all the information you need
+        over the course of the study.
+        The study consists of three stages:
+        <br><br>
+        <ol>
+
+            <li>
+                <b>Onboarding</b><br>
+                We will describe tasks you will be asked to perform in the study.
+                You'll have to complete short quizzes to demonstrate that you can perform these tasks correctly, and
+                answer all questions correctly to proceed.
+            </li>
+
+            <li>
+                <b>Auditing</b><br>
+                You'll be asked to judge fairness of predictions produced by an algorithm.
+                Your bonus will be determined based on the accuracy of your decisions.
+            </li>
+
+            <li>
+                <b>Exit Survey</b><br>
+                We will ask short questions to understand your decisions during Auditing.
+            </li>
+
+        </ol>
+        <b>You must complete all three stages to receive compensation for your participation.</b>
+    </div>
+
+	<hr/>
+
+    {% include 'includes/next.jinja' %}
+
+</div>

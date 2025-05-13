@@ -1,0 +1,2124 @@
+---
+output:
+  pdf_document: 
+    keep_tex: yes
+    fig_width: 6
+    fig_height: 4
+    toc: false
+    number_sections: false
+    extra_dependencies:
+      colortbl: []
+      booktabs: []
+      grffile: ["space"]
+      flafter: []
+
+fontsize: 9pt
+geometry: "left=2cm, right=2cm, top=2cm, bottom=1cm"
+
+params:
+  venv_dir: '/Users/jskirzynski/.virtualenvs/py39arm/bin/python'
+  report_python_dir: '/Users/jskirzynski/Desktop/cxai/'
+  build_dir: '/Users/jskirzynski/Desktop/cxai/reports/'
+  #venv_dir: '/Users/berk/.virtualenvs/py39arm/bin/python'
+  #report_python_dir: '/Users/berk/Dropbox (Harvard University)/repos/cxai/'
+  #build_dir: '/Users/berk/Dropbox (Harvard University)/repos/cxai/reports/'
+  report_data: 'results/25_01_12_results_closest/experiment.results'
+  collapse_alignment: True
+  define_conditions: True
+  condition_params: ['named', 'target_accuracy']
+---
+
+```{=latex}
+\pagenumbering{gobble}
+```
+
+```{r r-setup, include = FALSE}
+
+packages = c('reticulate', 'tidyverse', 'xtable', 'knitr', 'kableExtra', 'data.table', 'scales', 'GA', 'dplyr', 'ggh4x', 'psych')
+for (pkg in packages) {
+  library(pkg, character.only = TRUE, warn.conflicts = FALSE, quietly = TRUE, verbose = FALSE)
+}
+
+# utils
+source(paste0(params$report_python_dir, "reporting/",  "utils.R"))
+
+# load python virtual environment for reticulate
+use_python("/usr/local/bin/python3.9", required=T)
+
+# default options
+options(
+    dplyr.width = Inf, 
+    dplyr.print_max = 1e9,
+    stringsAsFactors = FALSE
+)
+
+# knitting options
+knitr::opts_knit$set(
+    progress = TRUE, 
+    verbose = TRUE
+)
+    
+# chunk options 
+knitr::opts_chunk$set(
+    echo = FALSE,
+    warning = FALSE, 
+    fig.path = 'figure/' 
+)
+
+```
+
+
+```{python python-setup}
+
+import sys
+sys.path.append(r.params['report_python_dir'])
+import dill
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
+import copy
+
+#options
+pd.set_option('display.max_columns', None)
+
+# load data file
+f = Path(r.params['report_data'])
+if not f.exists():
+    f = Path(r.params['report_python_dir']) / f
+assert f.exists()
+with open(f, 'rb') as infile:
+    results = dill.load(infile)
+
+```
+
+```{python python-preprocessing, include=FALSE}
+from itertools import product
+from collections import Counter
+
+# pull data frames out
+participant_df = pd.DataFrame(results['participants_df'])
+round_df = pd.DataFrame(results['round_df'])
+probing_df = pd.DataFrame(results['probing_df'])
+anchoring_df = pd.DataFrame(results['anchoring_df'])
+questionnaire_df = pd.DataFrame(results['questionnaire_df'])
+
+# parameters
+parameters = results['participants_df']['experimental_params'].iloc[0]
+n_total_robots = parameters['n_auditing']
+n_probing = 18
+
+cond_params = {k: parameters[k] for k in ['proxy_strength', 'CE_method']}
+
+def format_text(text):
+   words = text.split('_')
+   return ' '.join(word.capitalize() for word in words)
+
+# define conditions
+conditions_assignment = {}
+exp_assignment = {}
+proxy_assignment = {}
+for _, row in participant_df.iterrows():
+    expl = "Closest Explanations" if row['CE_method'] == "random" else "Multiple Explanations"
+    prox = format_text(row['proxy_strength'])
+    name = format_text(row['proxy_strength']) + "_" + expl
+    conditions_assignment[row['pid']] = name
+    exp_assignment[row['pid']] = expl
+    proxy_assignment[row['pid']] = prox
+value_counts = Counter(conditions_assignment.values())
+for key in conditions_assignment:
+   conditions_assignment[key] = f"{conditions_assignment[key]}"
+   exp_assignment[key] = f"{exp_assignment[key]}"
+   proxy_assignment[key] = f"{proxy_assignment[key]}"
+
+short_names = list(set(conditions_assignment.values()))
+
+# append condition name to each df
+for df in [participant_df, round_df, probing_df, anchoring_df, questionnaire_df]:
+  df['condition'] = df.apply(lambda x: conditions_assignment[x['pid']], axis=1)
+  df['exp_condition'] = df.apply(lambda x: exp_assignment[x['pid']], axis=1)
+  df['proxy_condition'] = df.apply(lambda x: proxy_assignment[x['pid']], axis=1)
+```
+
+```{r r-preprocessing, warning=FALSE, message=FALSE}
+
+round_df = data.frame(py$round_df)
+probing_df = data.frame(py$probing_df)
+anchoring_df = data.frame(py$anchoring_df)
+questionnaire_df = data.frame(py$questionnaire_df)
+
+participant_df = data.frame(py$participant_df) %>% 
+    filter(rejected == F) %>% 
+    select(-rejected)
+
+```
+
+```{r compute-exclusions, warning=FALSE, message=FALSE}
+
+conditions <- c(py$short_names, 'Overall')
+
+cond_df <- data.frame(py$participant_df)
+
+exclusions <- cond_df %>%
+  filter(condition %in% conditions) %>%
+  group_by(condition) %>%
+  summarise(
+    Participants = n(),
+    `Accepted Participants` = n() - sum(rejected),
+    `Failed Attention Checks` = paste0(sum(attention_check == FALSE), " (", percent(sum(attention_check == FALSE) / n()), ")"),
+    #`Failed Consistency Checks` = paste0(sum(consistency_check == FALSE), " (", percent(sum(consistency_check == FALSE) / n()), ")"),
+    `Rejection Rate` = paste0(sum(rejected), " (", percent(sum(rejected) / n()), ")")
+  ) %>%
+  arrange(condition) %>%
+  ungroup()
+
+overall <- cond_df %>%
+  summarise(
+    Participants = n(),
+    `Accepted Participants` = n() - sum(rejected),
+    `Failed Attention Checks` = paste0(sum(attention_check == FALSE), " (", percent(sum(attention_check == FALSE) / n()), ")"),
+    #`Proxy Causality Belief` = paste0(sum(causality_belief == "causal"), " (", percent(sum(causality_belief == "causal") / n()), ")"),
+    #`Failed Consistency Checks` = paste0(sum(consistency_check == FALSE), " (", percent(sum(consistency_check == FALSE) / n()), ")"),
+    `Rejection Rate` = paste0(sum(rejected), " (", percent(sum(rejected) / n()), ")")
+  ) %>%
+  ungroup()
+
+exclusions <- bind_rows(exclusions, overall)
+```
+
+
+```{r parameters-table,  echo=FALSE, message=FALSE}
+if (length(py$cond_params) > 1) {
+    paramdf <- sapply(py$cond_params, function(x){if (is.character(x)) as.character(x) else toString(x)})
+} else {
+    paramdf <- py$cond_params
+}
+paramdf <- as.data.frame(lapply(paramdf, function(x) paste(x, collapse=", ")))
+paramdf <- data.frame('Parameter'=c(colnames(paramdf), "Participants"), 'Values'=c(unlist(paramdf), nrow(participant_df)), row.names = NULL)
+
+kable(paramdf, format="latex",
+      position = "!t",
+      booktabs = T,
+      linesep = "\\midrule",
+      ) %>% 
+    column_spec(1, bold = T) 
+```
+
+
+```{r exclusions-table, warning=FALSE, message=FALSE}
+
+kable(exclusions, format="latex",
+      position = "!h",
+      booktabs = T,
+      linesep = "\\midrule",
+      ) %>% 
+    column_spec(1, bold = T) %>% 
+    kable_styling(bootstrap_options = "striped", latex_options = c("hold_position", "scale_down"))
+
+```
+
+
+```{r coverage-processing, warning=FALSE, message=FALSE}
+
+# probing / deployment results
+probing_df = data.frame(py$probing_df) %>%
+    group_by(pid) %>%
+    mutate(decision_id = row_number()) %>%
+    ungroup()
+
+round_df = data.frame(py$round_df) %>%
+    group_by(pid) %>%
+    mutate(decision_id = row_number()) %>%
+    ungroup()
+
+compute_metrics <- function(df, lb, ub) {
+  met_df <- df %>%
+    mutate(true_fairness = case_when(
+      robot_delta < lb ~ "FAIR",
+      robot_delta == 0 ~ "FAIR",
+      robot_delta >= ub ~ "UNFAIR",
+      TRUE ~ "ABSTAIN"
+    )) %>%
+    group_by(pid) %>%
+    mutate(reliability = ifelse(judgement == true_fairness, 1, ifelse(true_fairness == "ABSTAIN", NA, 0)),
+           coverage = 1.0-ub + lb) %>%
+    mutate(mean_reliability = mean(reliability, na.rm=TRUE)) %>%
+    ungroup() %>%
+    filter(decision_id == 15) %>%
+  
+  return(met_df)
+}
+
+compute_metrics_protected <- function(df, lb, ub) {
+  met_df <- df %>%
+    mutate(true_fairness_protected = case_when(
+      robot_user_delta < lb ~ "FAIR",
+      robot_user_delta == 0 ~ "FAIR",
+      robot_user_delta >= ub ~ "UNFAIR",
+      TRUE ~ "ABSTAIN"
+    )) %>%
+    group_by(pid) %>%
+    mutate(reliability_protected = ifelse(judgement == true_fairness_protected, 1, ifelse(true_fairness_protected == "ABSTAIN", NA, 0)),
+           coverage_protected = 1.0-ub + lb) %>%
+    mutate(mean_reliability_protected = mean(reliability_protected, na.rm=TRUE)) %>%
+    ungroup() %>%
+    filter(decision_id == 15) %>%
+  
+  return(met_df)
+}
+
+bs <- seq(0, 0.5, by = 0.01)
+pid_metrics_list <- lapply(bs, function(b) {
+  compute_metrics(round_df, lb = b, ub = 1.0-b)
+})
+
+pid_metrics_list_protected <- lapply(bs, function(b) {
+  compute_metrics_protected(round_df, lb = b, ub = 1.0-b)
+})
+
+metrics_df_main <- bind_rows(pid_metrics_list)
+
+metrics_df_protected <- bind_rows(pid_metrics_list_protected) 
+metrics_df <- bind_rows(metrics_df_main, metrics_df_protected)
+
+temp_df <- probing_df %>% 
+  group_by(pid) %>%
+  mutate(diff_beliefs = ifelse(robot_protected_attribute == company, 1, 0))
+```
+
+
+```{r plotting-defaults, include = FALSE, message=FALSE}
+
+decision_scale = scale_colour_manual(
+    values = c('abstain' = 'grey',  
+               'override' = 'red',  
+               'accept' = 'forestgreen')
+    )
+
+plot_theme = theme_bw() + 
+    theme(
+        plot.title = element_blank(),
+        legend.position = "top",
+        panel.border = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        axis.ticks = element_blank(), 
+    )
+
+overall_x_scale = scale_x_continuous(
+    name="Number of Predictions", 
+    limits = sort(1 - 2*bs, decreasing=FALSE), 
+    n.breaks=length(bs), 
+    minor_breaks = NULL)
+
+heatmap_theme_horizontal <- theme(
+    panel.background = element_blank(),
+    panel.border = element_blank(),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    legend.position = "top",
+    legend.key.size = unit(1, "cm"),
+    axis.ticks = element_blank(),
+    axis.text.y = element_text(size = 15, margin = margin(r = 0.05, unit = "cm")),
+    axis.text.x = element_text(size = 15, margin = margin(t = 0.05, unit = "cm")),
+    axis.title.y = element_text(size = 17.5, margin = margin(r = 1, unit = "cm")),
+    axis.title.x = element_text(size = 17.5, margin = margin(t = 1, b = 1, unit = "cm")),
+    plot.title = element_text(size = 20, margin = margin(t = 0.25, b = 0.5, unit = "cm"), hjust = 0.5, face = "bold"),
+    # Facets
+    strip.text = element_text(size = 15, face = "bold"),
+    panel.spacing.x = unit(1.5, "cm")  
+    )
+
+threshold_theme <- theme(strip.text = element_text(size = 15, face = "bold"),
+        panel.spacing.x = unit(1.25, "cm"),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 15),
+        axis.ticks = element_blank(),
+        axis.text.y = element_text(size = 15, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 15, margin = margin(t = 0.05, unit = "cm")),
+        axis.title.y = element_text(size = 17.5, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_text(size = 17.5, margin = margin(t = 1, b = 1, unit = "cm")))
+```
+
+
+```{r threshold-processing, warning=FALSE, message=FALSE}
+compute_metrics <- function(df, threshold) {
+  met_df <- df %>%
+    mutate(true_fairness = case_when(
+      robot_delta < threshold ~ "FAIR",
+      robot_delta == 0 ~ "FAIR",
+      robot_delta >= threshold ~ "UNFAIR",
+    )) %>%
+    group_by(pid) %>%
+    mutate(reliability = ifelse(judgement == true_fairness, 1, 0),
+           reliability_all_fair = ifelse("FAIR" == true_fairness, 1, 0),
+           tp = ifelse(judgement == true_fairness & true_fairness == "UNFAIR", 1, 0),
+           tn = ifelse(judgement == true_fairness & true_fairness == "FAIR", 1, 0),
+           fp = ifelse(judgement != true_fairness & true_fairness == "FAIR", 1, 0),
+           fn = ifelse(judgement != true_fairness & true_fairness == "UNFAIR", 1, 0),
+           
+           tp_all_fair = 0,
+           tn_all_fair = ifelse(true_fairness == "FAIR", 1, 0),
+           fp_all_fair = 0,
+           fn_all_fair = ifelse(true_fairness == "UNFAIR", 1, 0),
+           
+           "threshold" = threshold) %>%
+    mutate(mean_reliability = mean(reliability),
+           mean_reliability_all_fair = mean(reliability_all_fair),
+           mean_reliability_fair = sum(reliability & judgement == "FAIR") / sum(judgement == "FAIR"),
+           mean_reliability_unfair = sum(reliability & judgement != "FAIR") / sum(judgement != "FAIR"),
+           mean_tpr = ifelse(sum(true_fairness != "FAIR") > 0, 
+                             sum(reliability & judgement != "FAIR") / sum(true_fairness != "FAIR"),
+                             0),
+           mean_fpr = ifelse(sum(true_fairness == "FAIR") > 0,
+                             sum(!reliability & judgement != "FAIR") / sum(true_fairness == "FAIR"),
+                             1),
+           mean_ppv = ifelse(sum(judgement != "FAIR") > 0,
+                             sum(reliability & judgement != "FAIR") / sum(judgement != "FAIR"),
+                             0),
+           all_tp = sum(tp),
+           all_tn = sum(tn),
+           all_fp = sum(fp),
+           all_fn = sum(fn),
+           n_unfair = sum(tp + fp),
+           dor = ((0.5 + sum(tp)) * (0.5 + sum(tn))) / ((0.5 + sum(fp)) * (0.5 + sum(fn))),
+           dor_all_fair = ((0.5 + sum(tp_all_fair)) * (0.5 + sum(tn_all_fair))) / ((0.5 + sum(fp_all_fair)) * (0.5 + sum(fn_all_fair)))
+           ) %>%
+    filter(decision_id == 15) %>%
+    ungroup()
+  
+  return(met_df)
+}
+
+compute_metrics_protected <- function(df, threshold) {
+  met_df <- df %>%
+    mutate(true_fairness_protected = case_when(
+      robot_user_delta < threshold ~ "FAIR",
+      robot_user_delta == 0 ~ "FAIR",
+      robot_user_delta >= threshold ~ "UNFAIR",
+    )) %>%
+    group_by(pid) %>%
+    mutate(reliability_protected = ifelse(judgement == true_fairness_protected, 1, 0),
+           tp_protected = ifelse(judgement == true_fairness_protected & true_fairness_protected == "UNFAIR", 1, 0),
+           tn_protected = ifelse(judgement == true_fairness_protected & true_fairness_protected == "FAIR", 1, 0),
+           fp_protected = ifelse(judgement != true_fairness_protected & true_fairness_protected == "FAIR", 1, 0),
+           fn_protected = ifelse(judgement != true_fairness_protected & true_fairness_protected == "UNFAIR", 1, 0),
+           
+           tp_all_fair_protected = 0,
+           tn_all_fair_protected = ifelse(true_fairness_protected == "FAIR", 1, 0),
+           fp_all_fair_protected = 0,
+           fn_all_fair_protected = ifelse(true_fairness_protected == "UNFAIR", 1, 0),
+           
+           threshold_protected = threshold) %>%
+    mutate(mean_reliability_protected = mean(reliability_protected),
+           mean_reliability_protected_fair = sum(reliability_protected & judgement == "FAIR") / sum(judgement == "FAIR"),
+           mean_reliability_protected_unfair = sum(reliability_protected & judgement != "FAIR") / sum(judgement != "FAIR"),
+           mean_tpr_protected = ifelse(sum(true_fairness_protected != "FAIR") > 0,
+                                       sum(reliability_protected & judgement != "FAIR") / sum(true_fairness_protected != "FAIR"),
+                                       0),
+           mean_fpr_protected = ifelse(sum(true_fairness_protected == "FAIR") > 0,
+                                       sum(!reliability_protected & judgement != "FAIR") / sum(true_fairness_protected == "FAIR"),
+                                       1),
+           mean_ppv_protected = ifelse(sum(judgement != "FAIR") > 0,
+                             sum(reliability_protected & judgement != "FAIR") / sum(judgement != "FAIR"),
+                             0),
+           dor_protected = ((0.5 + sum(tp_protected)) * (0.5 + sum(tn_protected))) / ((0.5 + sum(fp_protected)) * (0.5 + sum(fn_protected))),
+           dor_all_fair_protected = ((0.5 + sum(tp_all_fair_protected)) * (0.5 + sum(tn_all_fair_protected))) / (0.5 + (sum(fp_all_fair_protected)) * (0.5 + sum(fn_all_fair_protected)))
+           ) %>%
+    filter(decision_id == 15) %>%
+    ungroup()
+  
+  return(met_df)
+}
+
+compute_metrics_belief <- function(df, threshold) {
+  met_df <- df %>%
+    mutate(true_fairness_belief = case_when(
+      robot_belief_delta < threshold ~ "FAIR",
+      robot_belief_delta == 0 ~ "FAIR",
+      robot_belief_delta >= threshold ~ "UNFAIR",
+    )) %>%
+    group_by(pid) %>%
+    mutate(reliability_belief = ifelse(judgement == true_fairness_belief, 1, 0),
+           tp_belief = ifelse(judgement == true_fairness_belief & true_fairness_belief == "UNFAIR", 1, 0),
+           tn_belief = ifelse(judgement == true_fairness_belief & true_fairness_belief == "FAIR", 1, 0),
+           fp_belief = ifelse(judgement != true_fairness_belief & true_fairness_belief == "FAIR", 1, 0),
+           fn_belief = ifelse(judgement != true_fairness_belief & true_fairness_belief == "UNFAIR", 1, 0),
+           
+           tp_all_fair_belief = 0,
+           tn_all_fair_belief = ifelse(true_fairness_belief == "FAIR", 1, 0),
+           fp_all_fair_belief = 0,
+           fn_all_fair_belief = ifelse(true_fairness_belief == "UNFAIR", 1, 0),
+           
+           threshold_belief = threshold) %>%
+    mutate(mean_reliability_belief = mean(reliability_belief),
+           mean_reliability_belief_fair = sum(reliability_belief & judgement == "FAIR") / sum(judgement == "FAIR"),
+           mean_reliability_belief_unfair = sum(reliability_belief & judgement != "FAIR") / sum(judgement != "FAIR"),
+           mean_tpr_belief = ifelse(sum(true_fairness_belief != "FAIR") > 0,
+                                    sum(reliability_belief & judgement != "FAIR") / sum(true_fairness_belief != "FAIR"),
+                                    0),
+           mean_fpr_belief = ifelse(sum(true_fairness_belief == "FAIR") > 0,
+                                    sum(!reliability_belief & judgement != "FAIR") / sum(true_fairness_belief == "FAIR"),
+                                    1),
+           mean_ppv_belief = ifelse(sum(judgement != "FAIR") > 0,
+                             sum(reliability_belief & judgement != "FAIR") / sum(judgement != "FAIR"),
+                             0),
+           dor_belief = ((0.5 + sum(tp_belief)) * (0.5 + sum(tn_belief))) / ((0.5 + sum(fp_belief)) * (0.5 + sum(fn_belief))),
+           dor_all_fair_belief = ((0.5 + sum(tp_all_fair_belief)) * (0.5 + sum(tn_all_fair_belief)) / (0.5 + sum(fp_all_fair_belief)) * (0.5 + sum(fn_all_fair_belief)))
+           ) %>%
+    filter(decision_id == 15) %>%
+    ungroup()
+  
+  return(met_df)
+}
+
+bs <- seq(0, 1.0, by = 0.01)
+pid_metrics_list <- lapply(bs, function(b) {
+  compute_metrics(round_df, threshold = b)
+})
+
+pid_metrics_list_protected <- lapply(bs, function(b) {
+  compute_metrics_protected(round_df, threshold = b)
+})
+
+pid_metrics_list_belief <- lapply(bs, function(b) {
+  compute_metrics_belief(round_df, threshold = b)
+})
+
+metrics_df_main_threshold <- bind_rows(pid_metrics_list)
+
+
+metrics_df_protected_threshold <- bind_rows(pid_metrics_list_protected) 
+metrics_df_belief_threshold <- bind_rows(pid_metrics_list_belief) 
+metrics_df_protected_threshold$threshold = metrics_df_protected_threshold$threshold_protected
+metrics_df_belief_threshold$threshold = metrics_df_belief_threshold$threshold_belief
+
+metrics_df_main_threshold$mean_reliability_belief = metrics_df_belief_threshold$mean_reliability_belief
+metrics_df_main_threshold$mean_reliability_protected = metrics_df_protected_threshold$mean_reliability_protected
+metrics_df_main_threshold$mean_tpr_belief = metrics_df_belief_threshold$mean_tpr_belief
+metrics_df_main_threshold$mean_tpr_protected = metrics_df_protected_threshold$mean_tpr_protected
+metrics_df_main_threshold$mean_fpr_belief = metrics_df_belief_threshold$mean_fpr_belief
+metrics_df_main_threshold$mean_fpr_protected = metrics_df_protected_threshold$mean_fpr_protected
+metrics_df_main_threshold$dor_belief = metrics_df_belief_threshold$dor_belief
+metrics_df_main_threshold$dor_protected = metrics_df_protected_threshold$dor_protected
+metrics_df_main_threshold$dor_all_fair_belief = metrics_df_belief_threshold$dor_all_fair_belief
+metrics_df_main_threshold$dor_all_fair_protected = metrics_df_protected_threshold$dor_all_fair_protected
+metrics_df_main_threshold$mean_ppv_belief = metrics_df_belief_threshold$mean_ppv_belief
+metrics_df_main_threshold$mean_ppv_protected = metrics_df_protected_threshold$mean_ppv_protected
+
+
+metrics_df_main_threshold$mean_reliability_belief_fair = metrics_df_belief_threshold$mean_reliability_belief_fair
+metrics_df_main_threshold$mean_reliability_protected_fair = metrics_df_protected_threshold$mean_reliability_protected_fair
+metrics_df_main_threshold$mean_reliability_belief_unfair = metrics_df_belief_threshold$mean_reliability_belief_unfair
+metrics_df_main_threshold$mean_reliability_protected_unfair = metrics_df_protected_threshold$mean_reliability_protected_unfair
+
+metrics_df_threshold <- metrics_df_main_threshold %>% 
+  mutate(condition = factor(condition, 
+                            levels = unique(condition)[order(case_when(
+                                        grepl("Weak", condition) ~ 1,
+                                        grepl("Medium", condition) ~ 2,
+                                        grepl("Strong", condition) ~ 3))]
+                            ))
+
+```
+
+
+```{r mean_metrics}
+NUM_CONDS = length(unique(metrics_df_main_threshold$condition))
+
+if (NUM_CONDS >= 2) {
+  conditions <- unique(metrics_df_main_threshold$condition)
+  condition_pairs <- combn(conditions, 2, simplify = FALSE)
+  
+  # Function to perform analysis for a pair of conditions
+  analyze_pair <- function(cond_pair, data) {
+    pair_data <- data %>% filter(condition %in% cond_pair)
+    
+    result <- pair_data %>%
+      group_by(threshold) %>%
+      summarize(
+        p_value = wilcox.test(dor ~ condition)$p.value,
+        cond1 = cond_pair[1],
+        cond2 = cond_pair[2],
+        mean_cond1 = mean(dor[condition == cond_pair[1]]),
+        sd1 = sd(dor[condition == cond_pair[1]]),
+        median1 = median(dor[condition == cond_pair[1]]),
+        mean_cond2 = mean(dor[condition == cond_pair[2]]),
+        sd2 = sd(dor[condition == cond_pair[2]]),
+        median2 = median(dor[condition == cond_pair[2]]),
+        U = wilcox.test(dor ~ condition)$statistic
+      ) %>%
+      filter(p_value < 0.05)
+    
+    return(result)
+  }
+  
+  # Bootstrap analysis for each condition at threshold 0.02
+  for (cond in conditions){
+    all_means <- c()
+    all_ses <- c()
+    all_ns <- c()
+    print(cond)
+    for (t in c(0.2)) {
+      m_data <- metrics_df_main_threshold %>% 
+        filter(threshold == t, condition == cond) %>%
+        mutate(discrimination_level = (all_tp + all_fp) / 16) %>%
+        mutate(model_discrimination = ifelse(discrimination_level >= 0.2, 1, 0))
+      
+      # Function to simulate one trial of random guessing
+      random_guess_trial <- function(labels, what="ppv") {
+       guesses <- sample(c("FAIR", "UNFAIR"), size = length(labels), replace = TRUE)
+       tp <- sum(guesses == labels & labels == "UNFAIR")
+       tn <- sum(guesses == labels & labels == "FAIR")
+       fp <- sum(guesses != labels & labels == "FAIR")
+       fn <- sum(guesses != labels & labels == "UNFAIR")
+       p <- sum(guesses == "UNFAIR")
+       ppv <- ifelse(p > 0, tp / p, 0)
+       tpr <- ifelse(tp + fn > 0, tp / (tp + fn), 0)
+       fpr <- ifelse(fp + tn > 0, fp / (fp + tn), 0)
+       if (what == "ppv") {
+         return(ppv)
+       } else if (what == "tpr") {
+         return(tpr)
+       } else if (what == "fpr") {
+         return(fpr)
+         }
+      }
+      
+      all_fair_trial <- function(labels) {
+       guesses <- sample(c("FAIR"), size = length(labels), replace = TRUE)
+       tp <- sum(guesses == labels & labels == "UNFAIR")
+       tn <- sum(guesses == labels & labels == "FAIR")
+       fp <- sum(guesses != labels & labels == "FAIR")
+       fn <- sum(guesses != labels & labels == "UNFAIR")
+       dor <- ((0.5 + tp) * (0.5 + tn)) / ((0.5 + fp) * (0.5 + fn))
+       return(dor)
+      }
+
+      cond_df <- round_df %>% filter(condition == cond)
+      rand_part = unique(cond_df$pid)[1]
+      met_df <- round_df %>%
+        mutate(true_fairness = case_when(
+                robot_delta < t ~ "FAIR",
+                robot_delta == 0 ~ "FAIR",
+                robot_delta >= t ~ "UNFAIR",
+        )) %>%
+        filter(condition == cond, pid == rand_part)
+      true_labels <- na.omit(met_df$true_fairness)
+      n_trials <- 1000
+      all_fair_reliabilities <- replicate(n_trials, all_fair_trial(true_labels))
+      observed_reliabilities <- m_data$dor
+      
+      print(wilcox.test(m_data$mean_ppv, m_data$mean_ppv_belief))
+  
+      #print(paste("Normality:", shapiro.test(m_data$mean_reliability)))
+  
+      #boot_mean <- function(data, i) median(data[i])
+      #boot_obj <- boot(m_data$mean_reliability, boot_mean, R=1000)
+      #ci <- boot.ci(boot_obj, type="basic")
+      n <- length(m_data$mean_ppv_belief)
+      meanppv <- mean(m_data$mean_ppv_belief)
+      meantpr <- mean(m_data$mean_tpr_belief)
+      meanfpr <- mean(m_data$mean_fpr_belief)
+      seppv = sd(m_data$mean_ppv_belief) / sqrt(n)
+      setpr = sd(m_data$mean_tpr_belief) / sqrt(n)
+      sefpr = sd(m_data$mean_fpr_belief) / sqrt(n)
+      ci_lower = pmax(0, mean - 1.96 * se)
+      ci_upper = pmin(1, mean + 1.96 * se)
+      all_means <- c(all_means, mean)
+      all_ses <- c(all_ses, se)
+      all_ns <- c(all_ns, n)
+      
+      random_ppv <- replicate(n_trials, random_guess_trial(true_labels, what="ppv"))
+      random_tpr <- replicate(n_trials, random_guess_trial(true_labels, what="tpr"))
+      random_fpr <- replicate(n_trials, random_guess_trial(true_labels, what="fpr"))
+
+      mean_rand_ppv <- mean(random_ppv)
+      mean_rand_fpr <- mean(random_fpr)
+      mean_rand_tpr <- mean(random_tpr)
+      se_rand_ppv = sd(random_ppv) / sqrt(1000)
+      se_rand_tpr = sd(random_tpr) / sqrt(1000)
+      se_rand_fpr = sd(random_tpr) / sqrt(1000)
+      
+      mean_fair <- mean(all_fair_reliabilities)
+      se_fair = sd(all_fair_reliabilities) / sqrt(1000)
+      
+      print(paste("Mean PPV:", round(meanppv, 2), "+-", round(seppv, 2)))
+      print(paste("Mean TPR:", round(meantpr, 2), "+-", round(setpr, 2)))
+      print(paste("Mean FPR:", round(meanfpr, 2), "+-", round(sefpr, 2)))
+      
+      #print(paste("Mean Rand PPV:", round(mean_rand_ppv, 2), "+-", round(se_rand_ppv, 2)))
+      #print(paste("Mean Rand TPR:", round(se_rand_tpr, 2), "+-", round(se_rand_tpr, 2)))
+      #print(paste("Mean Rand FPR:", round(mean_rand_fpr, 2), "+-", round(se_rand_fpr, 2)))
+      #print(paste("Mean Random:", round(mean_rand, 2), "+-", round(se_rand, 2)))
+      #print(paste("Mean All Fair:", round(mean_fair, 2), "+-", round(se_fair, 2)))
+    }
+
+    ultra_mean <- mean(all_means)
+    
+    variances <- all_ses^2 * all_ns
+    # 2. Pool the variances
+    df <- all_ns - 1
+    pooled_var <- sum(variances * df) / sum(df)
+    # 3. Calculate new SE with combined N
+    total_n <- sum(all_ns)
+    ultra_se <- sqrt(pooled_var / total_n)
+    
+  }
+  
+  if (length(conditions) > 5) {
+  m_data1 <- metrics_df_threshold %>%
+    filter(threshold == 0.2, condition == conditions[1])
+  
+  m_data2 <- metrics_df_threshold %>%
+    filter(threshold == 0.2, condition == conditions[6])
+  
+  new_stat1 <- m_data1$all_tp + m_data1$all_fp
+  new_stat2 <- m_data2$all_tp + m_data2$all_fp
+  
+  print(wilcox.test(new_stat1, new_stat2))
+  
+  n1 <- length(new_stat1)
+  n2 <- length(new_stat2)
+  mean1 <- mean(new_stat1)
+  mean2 <- mean(new_stat2)
+  se1 = sd(m_data1$mean_fpr) / sqrt(n1)
+  se2 = sd(m_data2$mean_fpr) / sqrt(n2)
+  print(paste("Mean PPV Closest:", round(mean1, 2), "+-", round(se1, 2)))
+  print(paste("Mean PPV Multiple:", round(mean2, 2), "+-", round(se2, 2)))
+  }
+}
+```
+
+
+```{r boxplot, fig.height=8, fig.width = 9}
+# it was width 11.5 for all 3 metrics, height was 9
+base_metrics <- c("mean_ppv")#, "mean_tpr", "mean_fpr")
+#base_metrics <- c("mean_tpr", "mean_fpr")
+
+boxplot_data <- metrics_df_threshold %>%
+  filter(threshold == 0.2) %>%
+  pivot_longer(cols = c(base_metrics,
+                        paste0(base_metrics, "_protected"),
+                        paste0(base_metrics, "_belief")),
+               names_to = "group",
+               values_to = "measurement") %>%
+  mutate(proxy_condition = factor(proxy_condition, 
+                                  levels = rev(c("Weak Proxy", 
+                                             "Medium Proxy", 
+                                             "Strong Proxy"))),
+         type = case_when(
+            endsWith(group, "protected") ~ "Known Protected Attribute",
+            endsWith(group, "belief") ~ "Known Causal Mechanism",
+            TRUE ~ "Unknown Protected Attribute"
+          ),
+         group = toupper(str_extract(group, "ppv|tpr|fpr"))) %>%
+  mutate(group = factor(group, 
+                        levels = c("PPV", "TPR", "FPR")),
+         type = factor(type,
+                       levels = c("Unknown Protected Attribute", "Known Protected Attribute", "Known Causal Mechanism"))) %>%
+  filter(type == c("Unknown Protected Attribute"))#c("Known Protected Attribute", "Known Causal Mechanism"))
+
+boxplot_data_baseline <- metrics_df_threshold %>%
+  filter(threshold == 0.2) %>%
+  pivot_longer(cols = c(base_metrics),
+               names_to = "group",
+               values_to = "measurement") %>%
+  mutate(proxy_condition = factor(proxy_condition, 
+                                  levels = c("Weak Proxy", 
+                                             "Medium Proxy", 
+                                             "Strong Proxy")),
+         type = case_when(
+            endsWith(group, "protected") ~ "Known Protected Attribute",
+            endsWith(group, "belief") ~ "Known Causal Mechanism",
+            TRUE ~ "Unknown Protected Attribute"
+          ),
+         group = toupper(str_extract(group, "ppv|tpr|fpr"))) %>%
+  mutate(group = factor(group, 
+                        levels = c("PPV", "TPR", "FPR")),
+         type = factor(type,
+                       levels = c("Unknown Protected Attribute", "Known Protected Attribute", "Known Causal Mechanism")))
+
+boxplot_data_other <- metrics_df_threshold %>%
+  filter(threshold == 0.2) %>%
+  pivot_longer(cols = c(paste0(base_metrics, "_protected"),
+                        paste0(base_metrics, "_belief")),
+               names_to = "group",
+               values_to = "measurement") %>%
+  mutate(proxy_condition = factor(proxy_condition, 
+                                  levels = c("Weak Proxy", 
+                                             "Medium Proxy", 
+                                             "Strong Proxy")),
+         type = case_when(
+            endsWith(group, "protected") ~ "Known Protected Attribute",
+            endsWith(group, "belief") ~ "Known Causal Mechanism",
+            TRUE ~ "Unknown Protected Attribute"
+          ),
+         group = toupper(str_extract(group, "ppv|tpr|fpr"))) %>%
+  mutate(group = factor(group, 
+                        levels = c("PPV", "TPR", "FPR")),
+         type = factor(type,
+                       levels = c("Unknown Protected Attribute", "Known Protected Attribute", "Known Causal Mechanism")))
+
+txt <- data.frame(x = 1.5, y = -0.5, lab = "0.2")
+
+#switch wihich boxplot_data you're using
+boxplot_threshold <- ggplot(boxplot_data, 
+                           aes(x = type, y = measurement)) +
+  geom_boxplot(aes(fill = type), outlier.alpha = 0.5, width = 0.375) +
+  geom_point(data = boxplot_data, 
+             aes(x = type, y = measurement, fill = type), 
+             position = position_jitterdodge(jitter.width = 0.4, dodge.width = 0.9), 
+             shape = 21, size = 4, color = "black") +
+  scale_color_manual(values = c(
+    "Known Protected Attribute" = "#F8766D",
+    "Unknown Protected Attribute" = "#619CFF",
+    "Known Causal Mechanism" = "#00BE67"
+    ),
+    breaks = c("Unknown Protected Attribute", "Known Protected Attribute", "Known Causal Mechanism")) +
+  scale_fill_manual(values = c(
+    "Known Protected Attribute" = "#F8766D",
+    "Unknown Protected Attribute" = "#619CFF",
+    "Known Causal Mechanism" = "#00BE67"
+    ),
+    breaks = c("Unknown Protected Attribute", "Known Protected Attribute", "Known Causal Mechanism")) +
+  scale_y_continuous(limits = c(0, 1.0), breaks = seq(0, 1, by = 0.2), labels = scales::percent) +
+  theme_bw() +
+  theme(
+    strip.text = element_text(size = 20, face = "bold"),
+    panel.spacing.x = unit(1.25, "cm"),
+    legend.key.size = unit(2, "cm"),
+    legend.text = element_text(size = 20),
+    legend.position = "top",
+    axis.ticks = element_blank(),
+    axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+    axis.text.x = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+    axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+    axis.title.x = element_blank(),
+  ) +
+  theme(
+        # Text elements
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        
+        # Legend
+        legend.position = "top",
+        legend.box = "horizontal",
+        legend.margin = margin(t = 10, b = 10),
+        
+        # Grid
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        
+        # Plot margins
+        plot.margin = margin(t = 20, r = 35, b = 20, l = 20),
+        panel.border = element_blank(),
+    ) +
+  #ggh4x::facet_wrap2(proxy_condition ~ group, 
+  #             scales = "free", 
+  #             strip = ggh4x::strip_split(c("top", "bottom")),
+  #             labeller = labeller(
+  #               metric = c(
+  #                 "PPV" = "PPV",
+  #                 "TPR" = "TPR",
+  #                 "FPR" = "FPR"
+  #               ),
+  #               proxy_condition = c(
+  #                 "Weak Proxy" = "Weak Proxy",
+  #                 "Medium Proxy" = "Medium Proxy",
+  #                 "Strong Proxy" = "Strong Proxy"
+  #               )
+  #             )) +
+  labs(color = "", fill = "", x = "Proxy Strength") +
+  guides(
+    color = guide_legend(order = 1),
+    fill = guide_legend(order = 2)
+  ) +
+  facet_grid(
+    proxy_condition ~ group,  
+    scales = "free_y",  # Only allow y-scales to vary, keep x-axis fixed
+    switch = "both",  # This moves row labels to the left side
+              labeller = labeller(
+                metric = c(
+                  "PPV" = "PPV",
+                  "TPR" = "TPR",
+                  "FPR" = "FPR"
+                ),
+                proxy_condition = c(
+                  "Weak Proxy" = "Weak",
+                  "Medium Proxy" = "Medium",
+                  "Strong Proxy" = "Strong"
+                )
+              )) +
+  #scale_x_discrete(labels = c("", "0.2", "")) +
+  coord_flip()+
+  theme(strip.text = element_text(size = 25, face="plain"),
+        strip.background = element_blank(),
+        strip.placement = "outside",
+        strip.text.y.left = element_text(angle = 0, hjust = 1),
+        #strip.text = element_blank(),
+        panel.spacing.x = unit(1.25, "cm"),
+        panel.spacing.y = unit(0.75, "cm"),
+        legend.key.size = unit(1.5, "cm"),
+        legend.text = element_text(size = 17),
+        legend.position = "top",
+        axis.ticks = element_blank(),
+        axis.text.y = element_blank(),#element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_blank())#element_text(size = 25, margin = margin(t = 1, b = 1, unit = "cm")))
+
+boxplot_threshold
+
+# Separate facets
+splitFacet <- function(x){
+  if (inherits(x$facet, "FacetWrap2")) {
+    facet_vars <- sapply(x$facet$params$facets, function(q) {
+      as.character(rlang::quo_get_expr(q))
+    })
+    facet_vars <- gsub("^\\^", "", facet_vars)
+  } else {
+    facet_vars <- c(names(x$facet$params$rows), names(x$facet$params$cols))
+  }
+
+  x$facet    <- ggplot2::ggplot()$facet              
+  datasets   <- split(x$data, x$data[facet_vars])    
+  new_plots <- lapply(names(datasets), function(name) {
+    is_first_column <- grepl("Weak Proxy", name)
+    is_fpr_row <- grepl("FPR", name)
+    p <- x
+    p$data <- datasets[[name]]
+    if (nrow(datasets[[name]]) > 0) {
+      p <- p + theme(
+        legend.position = "none",
+        axis.text.y = if(!is_first_column) element_blank() else element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank()
+      )
+      p
+    } else {
+      NULL
+    }
+  })
+  new_plots <- Filter(Negate(is.null), new_plots)
+}
+
+separate_plots <- splitFacet(boxplot_threshold)
+
+```
+
+```{r separate_plots, fig.height=3, fig.width = 5.27}
+for (i in c(4,5,6,7,8,9)) {
+  if (length(separate_plots) >= i){
+    separate_plots[i]
+  }
+}
+```
+
+```{r separate_plots_yaxis, fig.height=3, fig.width = 6}
+separate_plots[1]
+separate_plots[2]
+separate_plots[3]
+```
+
+
+```{r decisions-plot, fig.height=8, fig.width=10, warning=FALSE}
+ARBITRARY_THRESHOLD = 0.2
+
+plot_data <- round_df %>%
+  mutate(true_fairness = case_when(
+          robot_delta < ARBITRARY_THRESHOLD ~ "FAIR",
+          robot_delta == 0 ~ "FAIR",
+          robot_delta >= ARBITRARY_THRESHOLD ~ "UNFAIR")) %>%
+  mutate(reliability = ifelse(judgement == true_fairness, 1, 0)) %>%
+  group_by(pid, cf_with_proxy) %>%
+  summarise(
+    condition = first(condition),
+    proxy_condition = first(proxy_condition),
+    exp_condition = first(exp_condition),
+    n_fair = sum(judgement == "FAIR"),  # count of judgments
+    n_unfair = sum(judgement != "FAIR"),
+    pct_fair = n_fair / n(),
+    pct_unfair = n_unfair / n(),
+    correct_fair = sum(reliability & judgement == "FAIR"),  # count of correct fair judgments
+    correct_unfair = sum(reliability & judgement != "FAIR"),  # count of correct fair judgments
+    pct_correct_fair = ifelse(n_fair != 0, correct_fair/n_fair, 0),  # for color intensity
+    pct_correct_unfair = ifelse(n_unfair != 0, -correct_unfair/n_unfair, 0),  # for color intensity
+    .groups = 'drop'
+  ) %>%
+  group_by(proxy_condition, exp_condition, cf_with_proxy) %>%
+  mutate(mean_pct_correct_fair = mean(pct_correct_fair),
+         mean_pct_correct_unfair = mean(pct_correct_unfair),
+         mean_pct_fair = mean(pct_fair),
+         mean_pct_unfair = mean(pct_unfair))
+
+plot_data_long <- plot_data %>%
+  pivot_longer(
+    cols = c(mean_pct_fair, mean_pct_unfair),
+    names_to = "judgment",
+    values_to = "proportion"
+  ) %>%
+  group_by(cf_with_proxy, judgment, proxy_condition, exp_condition) %>%
+  summarise(
+    proportion = mean(abs(proportion)),
+    accuracy = mean(case_when(
+      judgment == "mean_pct_fair" ~ mean_pct_correct_fair,
+      judgment == "mean_pct_unfair" ~ mean_pct_correct_unfair
+    )),
+    # Calculate just SE = sqrt(p*(1-p)/n)
+    se = sqrt((proportion * (1-proportion))/n()),
+    se_lower = proportion - 1.96*se,
+    se_upper = proportion + 1.96*se,
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    judgment = factor(judgment,
+                     levels = c("mean_pct_unfair", "mean_pct_fair"),
+                     labels = c("UNFAIR", "FAIR")),
+    cf_with_proxy = factor(cf_with_proxy,
+                          levels = c(FALSE, TRUE),
+                          labels = c("CE without Proxy", "CE with Proxy")),
+  )
+
+points_data <- plot_data %>%
+  pivot_longer(
+    cols = c(pct_fair, pct_unfair),  # use individual percentages
+    names_to = "judgment",
+    values_to = "proportion"
+  ) %>%
+  mutate(
+    judgment = factor(judgment,
+                     levels = c("pct_unfair", "pct_fair"),
+                     labels = c("UNFAIR", "FAIR")),
+    cf_with_proxy = factor(cf_with_proxy,
+                          levels = c(FALSE, TRUE),
+                          labels = c("CE without Proxy", "CE with Proxy")),
+    proportion = abs(proportion),
+    accuracy = case_when(
+      judgment == "FAIR" ~ mean_pct_correct_fair,
+      judgment == "UNFAIR" ~ mean_pct_correct_unfair
+    )
+  )
+
+dec_plot <- ggplot(plot_data_long, 
+       aes(x = judgment, y = proportion, fill = accuracy)) +
+  geom_bar(stat = "identity", 
+          position = "dodge",
+          color = "black",
+          linewidth = 0.25,
+          width = 0.75) +
+  geom_errorbar(aes(ymin = pmax(0, se_lower), ymax = pmin(1.0, se_upper)),
+                width = 0.2,
+                position = position_dodge(width = 0.75),
+                linewidth = 0.25) +
+  scale_fill_gradient(low = "white", high = "darkgreen", 
+                     name = "% Correct",
+                     limits = c(0, 1)) +
+  geom_text(aes(y = proportion+0.08,
+                x = judgment,
+                label = sprintf("%.0f%%", proportion * 100)),
+            position = position_dodge(width = 0.75),
+            vjust = -0.5,
+            size = 6) +
+  scale_y_continuous(labels = scales::percent,
+                    limits = c(0, 1)) +
+  facet_nested(proxy_condition ~ exp_condition + cf_with_proxy) +
+  labs(y = "Proportion of Judgments",
+       x = "Judgments") +
+  plot_theme + 
+  heatmap_theme_horizontal +
+  coord_flip() +
+  theme(strip.text = element_text(size = 20, face = "bold"),
+        panel.spacing.x = unit(1.5, "cm"),
+        legend.key.size = unit(1.5, "cm"),
+        legend.text = element_text(size = 20),
+        axis.ticks = element_blank(),
+        axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 20, margin = margin(t = 0.05, unit = "cm")),
+        axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm"), face = "bold"),
+        axis.title.x = element_text(size = 25, margin = margin(t = 1, b = 1, unit = "cm"), face = "bold"),
+        plot.title = element_text(size = 25, margin = margin(t = 0.25, b = 0.5, unit = "cm"), hjust = 0.5, face = "bold"))
+
+
+difference_data <- plot_data %>%
+  group_by(pid, proxy_condition, exp_condition) %>%
+  #filter(exp_condition == "Multiple Explanations") %>%
+  summarize(
+    difference = pct_unfair[cf_with_proxy == TRUE] - 
+                pct_unfair[cf_with_proxy == FALSE],
+    .groups = 'drop'
+  ) %>%
+  mutate(proxy_condition = factor(proxy_condition, 
+                                levels = c("Strong Proxy", 
+                                         "Medium Proxy", 
+                                         "Weak Proxy"),
+                                labels = c("Strong",
+                                          "Medium",
+                                          "Weak")))
+  
+
+diff_plot <- ggplot(difference_data, 
+                    aes(x = proxy_condition, y = difference, fill = proxy_condition)) +
+  geom_boxplot(#fill = proxy_condition, #"#fce5cd",
+               color = "black",
+               width = 0.6,
+               outlier.shape = NA) +
+  geom_point(data = difference_data, 
+             aes(x = proxy_condition, y = difference, fill = proxy_condition), 
+             position = position_jitterdodge(jitter.width = 0.4, dodge.width = 0.9), 
+             shape = 21, size = 4, color = "black") +
+  stat_summary(fun.y=base::mean, colour="darkred", geom="point", hape=18, size=4) +
+  stat_summary(geom = "text",
+              fun = function(x) mean(x),
+              aes(label = after_stat(sprintf("%.0f%%", y * 100))),
+              vjust = -0.5,
+              hjust = 0.6,
+              size = 8) +
+  #geom_point(data = difference_data, 
+  #           aes(x = proxy_condition, y = difference, fill = "#fce5cd"), 
+  #           position = position_jitterdodge(jitter.width = 0.4, dodge.width = 0.9), 
+  #           shape = 21, size = 4, color = "black", alpha=0.6) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+  scale_fill_manual(values = c(
+    "Weak" = "#FFF3E0",
+    "Medium" = "#FFCC80",
+    "Strong" = "#FF9800"
+    )) +
+  coord_flip() +
+  facet_grid(
+    proxy_condition ~ .,  
+    scales = "free_y",  # Only allow y-scales to vary, keep x-axis fixed
+    switch = "both",  # This moves row labels to the left side
+              labeller = labeller(
+                proxy_condition = c(
+                  "Weak Proxy" = "Weak",
+                  "Medium Proxy" = "Medium",
+                  "Strong Proxy" = "Strong"
+                )
+              )) +
+  labs(x = "Proxy Strength",
+       y = "Increase in Discrimination Claims") +
+  theme_bw() +
+  theme(
+    strip.text = element_text(size = 20, face = "bold"),
+    panel.spacing.x = unit(1.25, "cm"),
+    legend.key.size = unit(2, "cm"),
+    legend.text = element_text(size = 20),
+    legend.position = "top",
+    axis.ticks = element_blank(),
+    axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+    axis.text.x = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+    axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+    axis.title.x = element_text(size = 25, margin = margin(t = 1, unit = "cm")),
+  ) +
+  theme(
+        # Text elements
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        
+        # Legend
+        legend.position = "top",
+        legend.box = "horizontal",
+        legend.margin = margin(t = 10, b = 10),
+        
+        # Grid
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        
+        # Plot margins
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+        panel.border = element_blank(),
+    ) +
+  theme(strip.text = element_text(size = 25, face="plain"),
+        strip.background = element_blank(),
+        strip.placement = "outside",
+        strip.text.y.left = element_text(angle = 0, hjust = 1),
+        #strip.text = element_blank(),
+        panel.spacing.x = unit(1.25, "cm"),
+        panel.spacing.y = unit(0.75, "cm"),
+        legend.key.size = unit(1.5, "cm"),
+        legend.text = element_text(size = 20),
+        legend.position = "none",
+        axis.ticks = element_blank(),
+        axis.text.y = element_blank(),#element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_text(size = 25, margin = margin(t = 1, b = 1, unit = "cm")))
+
+
+diff_plot
+```
+
+```{r decisions-per-prediction, fig.width=6, fig.height=5}
+calculate_pair_kappa <- function(judge1, judge2) {
+  # Create 2x2 contingency table
+  cont_table <- table(factor(judge1, levels=c("FAIR", "UNFAIR")), 
+                     factor(judge2, levels=c("FAIR", "UNFAIR")))
+  # Calculate Cohen's Kappa
+  kappa_result <- cohen.kappa(cont_table)
+  kappa <- kappa_result$kappa
+  kappa = ifelse(is.nan(kappa), 1, kappa)
+  return(kappa)
+}
+
+all_pids <- unique(round_df$pid)
+all_pairs <- combn(all_pids, 2, simplify=FALSE)
+
+# Compute Kappa for each pair directly (no grouping yet)
+kappas <- sapply(all_pairs, function(pair) {
+  judge1 <- round_df$judgement[round_df$pid == pair[1]]
+  judge2 <- round_df$judgement[round_df$pid == pair[2]]
+  
+  cont_table <- table(
+    factor(judge1, levels=c("FAIR", "UNFAIR")),
+    factor(judge2, levels=c("FAIR", "UNFAIR"))
+  )
+  kappa_result <- cohen.kappa(cont_table)
+  kappa <- kappa_result$kappa
+  kappa = ifelse(is.nan(kappa), 1, kappa)
+  return(kappa)
+})
+
+print(mean(kappas))
+
+kappa_by_proxy <- round_df %>%
+ group_by(proxy_condition) %>%
+ group_map(function(data, key) {
+   pids <- unique(data$pid)
+   pairs <- combn(pids, 2, simplify=FALSE)
+   
+   kappas <- sapply(pairs, function(pair) {
+     judge1 <- data$judgement[data$pid == pair[1]]
+     judge2 <- data$judgement[data$pid == pair[2]]
+     
+     cont_table <- table(
+       factor(judge1, levels=c("FAIR", "UNFAIR")),
+       factor(judge2, levels=c("FAIR", "UNFAIR"))
+     )
+     kappa_result <- cohen.kappa(cont_table)
+     kappa <- kappa_result$kappa
+     kappa = ifelse(is.nan(kappa), 1, kappa)
+     return(kappa)
+   })
+   
+   # Return mean kappa for this proxy condition
+   tibble(
+     proxy_condition = key$proxy_condition,
+     mean_kappa = mean(kappas),
+     sd_kappa = sd(kappas)
+   )
+ }) %>%
+ bind_rows()
+
+
+plot_data <- round_df %>%
+  mutate(true_fairness = case_when(
+          robot_delta < ARBITRARY_THRESHOLD ~ "FAIR",
+          robot_delta == 0 ~ "FAIR",
+          robot_delta >= ARBITRARY_THRESHOLD ~ "UNFAIR")) %>%
+  mutate(reliability = ifelse(judgement == true_fairness, 1, 0),
+         tp = ifelse(judgement == true_fairness & true_fairness == "UNFAIR", 1, 0),
+         tn = ifelse(judgement == true_fairness & true_fairness == "FAIR", 1, 0),
+         fp = ifelse(judgement != true_fairness & true_fairness == "FAIR", 1, 0),
+         fn = ifelse(judgement != true_fairness & true_fairness == "UNFAIR", 1, 0)) %>%
+  group_by(pid) %>%
+  mutate(all_tp = sum(tp),
+         all_fp = sum(fp)) %>%
+  mutate(discrimination_level = (all_tp + all_fp) / 16) %>%
+  mutate(model_discrimination = ifelse(discrimination_level >= 0.2, 1, 0)) %>%
+  ungroup() %>%
+  filter(model_discrimination == 1) %>%
+  group_by(proxy_condition, decision_id) %>%
+  summarise(
+    condition = first(condition),
+    proxy_condition = first(proxy_condition),
+    exp_condition = first(exp_condition),
+    true_fairness = ifelse(first(true_fairness) == "FAIR", "Fair", "Discriminatory"),
+    ce_with_proxy = first(cf_with_proxy),
+    cf_exclusive_proxy = first(cf_exclusive_proxy),
+    n_fair = sum(judgement == "FAIR"),  # count of judgments
+    n_unfair = sum(judgement != "FAIR"),
+    pct_fair = n_fair / n(),
+    pct_unfair = n_unfair / n(),
+    
+    agreement = mean(
+      unlist(Map(function(x, y) x == y,
+                 judgement,
+                 rep(judgement, each = length(judgement))))
+    ),
+    .groups = 'drop'
+  )
+
+prediction_plot <- ggplot(plot_data, aes(x=decision_id, y=pct_unfair, fill=true_fairness)) +
+  geom_bar(stat = "identity", 
+          position = "dodge",
+          color = "black",
+          linewidth = 0.25,
+          width = 0.75) +
+  geom_text(data = filter(plot_data, ce_with_proxy == 1),
+           aes(y = 1),  # Position slightly above bar
+           label = "*",
+           size = 8) +
+  labs(x = "Prediction ID",
+       y = "Proportion of Discrimination Claims") +
+  scale_fill_manual(name="Ground Truth", values = c("Fair" = "white", "Discriminatory" = "red")) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+  facet_wrap(proxy_condition ~ .) +
+  theme_bw() +
+  theme(
+    #legend.key.size = unit(2, "cm"),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 15),
+    legend.position = "top",
+    axis.text.y = element_text(size = 10, margin = margin(r = 0.05, unit = "cm")),
+    axis.text.x = element_text(size = 10, margin = margin(t = 0.05, unit = "cm")),
+    axis.title.y = element_text(size = 15, margin = margin(r = 1, unit = "cm")),
+    axis.title.x = element_text(size = 15, margin = margin(t = 1, b = 1, unit = "cm")),)
+
+prediction_plot
+
+```
+
+
+```{r reliability-dec-plot, fig.width=8, fig.height=8}
+plot_data <- round_df %>%
+  mutate(true_fairness = case_when(
+          robot_delta < ARBITRARY_THRESHOLD ~ "FAIR",
+          robot_delta == 0 ~ "FAIR",
+          robot_delta >= ARBITRARY_THRESHOLD ~ "UNFAIR")) %>%
+  mutate(reliability = ifelse(judgement == true_fairness, 1, 0)) %>%
+  filter(cf_with_proxy == T, proxy_reliability != "idk", proxy_reliability != "less") %>% # we are only interested if reliability makes people take different decisions when the CE shows the proxy
+  group_by(pid, proxy_reliability) %>%
+  summarise(
+    condition = first(condition),
+    proxy_condition = first(proxy_condition),
+    exp_condition = first(exp_condition),
+    n_fair = sum(judgement == "FAIR"),  # count of judgments
+    n_unfair = -sum(judgement != "FAIR"),
+    pct_fair = n_fair / n(),
+    pct_unfair = n_unfair / n(),
+    correct_fair = sum(reliability & judgement == "FAIR"),  # count of correct fair judgments
+    correct_unfair = sum(reliability & judgement != "FAIR"),  # count of correct fair judgments
+    pct_correct_fair = ifelse(n_fair != 0, correct_fair/n_fair, 0),  # for color intensity
+    pct_correct_unfair = ifelse(n_unfair != 0, -correct_unfair/n_unfair, 0),  # for color intensity
+    .groups = 'drop'
+  ) %>%
+  group_by(proxy_condition, exp_condition, proxy_reliability) %>%
+  mutate(mean_pct_correct_fair = mean(pct_correct_fair),
+         mean_pct_correct_unfair = mean(pct_correct_unfair),
+         mean_pct_fair = mean(pct_fair),
+         mean_pct_unfair = mean(pct_unfair))
+
+plot_data_long <- plot_data %>%
+  pivot_longer(
+    cols = c(mean_pct_fair, mean_pct_unfair),
+    names_to = "judgment",
+    values_to = "proportion"
+  ) %>%
+  group_by(proxy_reliability, judgment, proxy_condition, exp_condition) %>%
+  summarise(
+    proportion = mean(abs(proportion)),
+    accuracy = mean(case_when(
+      judgment == "mean_pct_fair" ~ mean_pct_correct_fair,
+      judgment == "mean_pct_unfair" ~ mean_pct_correct_unfair
+    )),
+    # Calculate just SE = sqrt(p*(1-p)/n)
+    se = sqrt((proportion * (1-proportion))/n()),
+    se_lower = proportion - 1.96*se,
+    se_upper = proportion + 1.96*se,
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    judgment = factor(judgment,
+                     levels = c("mean_pct_unfair", "mean_pct_fair"),
+                     labels = c("UNFAIR", "FAIR")),
+    rel_label = case_when(
+         str_detect(proxy_reliability, "more") ~ "More Reliable",
+         str_detect(proxy_reliability, "same") ~ "No Change",
+         TRUE ~ "???"
+       )
+  ) %>%
+  mutate(proxy_condition = factor(proxy_condition, 
+    levels = unique(proxy_condition)[order(case_when(
+      grepl("Weak", proxy_condition) ~ 1,
+      grepl("Medium", proxy_condition) ~ 2,
+      grepl("Strong", proxy_condition) ~ 3
+    ))]
+  ))
+
+points_data <- plot_data %>%
+  pivot_longer(
+    cols = c(pct_fair, pct_unfair),  # use individual percentages
+    names_to = "judgment",
+    values_to = "proportion"
+  ) %>%
+  mutate(
+    judgment = factor(judgment,
+                     levels = c("pct_unfair", "pct_fair"),
+                     labels = c("UNFAIR", "FAIR")),
+    proportion = abs(proportion),
+    accuracy = case_when(
+      judgment == "FAIR" ~ mean_pct_correct_fair,
+      judgment == "UNFAIR" ~ mean_pct_correct_unfair
+    )
+  )
+
+dec_plot <- ggplot(plot_data_long, 
+       aes(x = judgment, y = proportion, fill = accuracy)) +
+  geom_bar(stat = "identity", 
+          position = "dodge",
+          color = "black",
+          linewidth = 0.25,
+          width = 0.75) +
+  geom_errorbar(aes(ymin = pmax(0, se_lower), ymax = pmin(1.0, se_upper)),
+                width = 0.2,
+                position = position_dodge(width = 0.75),
+                linewidth = 0.25) +
+  scale_fill_gradient(low = "white", high = "darkgreen", 
+                     name = "% Correct",
+                     limits = c(0, 1)) +
+  geom_text(aes(y = proportion+0.04,
+                x = judgment,
+                label = sprintf("%.0f%%", proportion * 100)),
+            position = position_dodge(width = 0.75),
+            vjust = -0.5,
+            size = 6) +
+  scale_y_continuous(labels = scales::percent,
+                    limits = c(0, 1)) +
+  facet_nested(proxy_condition + rel_label ~ exp_condition, scales = "free", space = "free") +
+  labs(y = "Proportion of Judgments",
+       x = "Judgments") +
+  plot_theme + 
+  heatmap_theme_horizontal +
+  coord_flip() +
+  theme(strip.text = element_text(size = 20, face = "bold"),
+        panel.spacing.x = unit(1.5, "cm"),
+        legend.key.size = unit(1.5, "cm"),
+        legend.text = element_text(size = 20),
+        axis.ticks = element_blank(),
+        axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 20, margin = margin(t = 0.05, unit = "cm")),
+        axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_text(size = 25, margin = margin(t = 1, b = 1, unit = "cm")),
+        plot.title = element_text(size = 25, margin = margin(t = 0.25, b = 0.5, unit = "cm"), hjust = 0.5, face = "bold"))
+
+#dec_plot
+
+
+plot_data_simple <- round_df %>%
+  filter(cf_with_proxy == T, proxy_reliability != "idk", proxy_reliability != "less") %>%
+  mutate(
+    reliability_belief = case_when(
+      str_detect(proxy_reliability, "more") ~ "Change in the CE\nBelieved to Enhance\nReliability",
+      str_detect(proxy_reliability, "same") ~ "Change in the CE\nBelieved to Have\nNo Effect"
+    )
+  ) %>%
+  group_by(pid, reliability_belief, exp_condition) %>%
+  summarise(
+    pct_fair = base::mean(judgement == "FAIR"),
+    .groups = 'drop'
+  ) %>%
+  mutate(exp_condition = ifelse(exp_condition == "Closest Explanations", "Single", "Multiple")) %>%
+  mutate(exp_condition = factor(exp_condition, 
+                                levels = c("Single", 
+                                         "Multiple")))
+  
+
+wilcox_results <- plot_data_simple %>%
+  group_by(exp_condition) %>%
+  summarise(
+    wilcox_test = list(wilcox.test(
+      pct_fair[reliability_belief == "Change in the CE\nBelieved to Enhance\nReliability"],
+      pct_fair[reliability_belief == "Change in the CE\nBelieved to Have\nNo Effect"],
+      paired = FALSE  # Assuming unpaired samples
+    )),
+    p_value = wilcox_test[[1]]$p.value,
+    W_stat = wilcox_test[[1]]$statistic,
+    .groups = 'drop'
+  )
+
+# Create the plot
+relplot <- ggplot(plot_data_simple,
+       aes(x = exp_condition, 
+           y = pct_fair, 
+           fill = reliability_belief)) +
+  geom_boxplot(
+    width = 0.7,
+    position = position_dodge(width = 0.8),
+    outlier.shape = NA  # Hide outliers as we'll show points
+  ) +
+  #geom_point(
+  #  position = position_jitterdodge(dodge.width = 0.8, jitter.width = 0.2),
+  #  size = 5,
+  #  alpha = 0.4
+  #) +
+  scale_y_continuous(
+    labels = scales::percent,
+    limits = c(0, 1)
+  ) +
+  stat_summary(geom = "text",
+              fun = function(x) median(x),
+              aes(label = after_stat(sprintf("%.0f%%", y * 100))),
+              vjust = -0.5,
+              hjust = 0.4,
+              size = 8,
+              position = position_dodge(width = 0.8)) +
+  scale_fill_manual(
+    values = c("Change in the CE\nBelieved to Enhance\nReliability" = "#fce5cd", "Change in the CE\nBelieved to Have\nNo Effect" = "#d9d2e9")
+  ) +
+  labs(
+    x = "Explanation Format",
+    y = "Proportion of Fair Claims",
+    fill = ""
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 20),
+    axis.title = element_text(size = 25),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 20),
+    axis.text.x = element_text(size = 20, margin = margin(t = 0.05, unit = "cm")),
+    legend.position = "top",
+    legend.key.size = unit(2, "cm"),
+    panel.grid.minor = element_blank()
+  )
+
+relplot
+```
+
+
+```{r threshold-plot, fig.height=9, fig.width=11.5}
+
+base_metrics <- c("mean_ppv", "mean_tpr", "mean_fpr")
+
+# Create long format data including all variations of each metric
+metrics_long <- metrics_df_threshold %>%
+  pivot_longer(
+    cols = c(base_metrics,
+            paste0(base_metrics, "_protected"),
+            paste0(base_metrics, "_belief")),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  mutate(
+    type = case_when(
+      endsWith(metric, "protected") ~ "Known Protected Attribute",
+      endsWith(metric, "belief") ~ "Known Causal Mechanism",
+      TRUE ~ "Unknown Protected Attribute"
+    ),
+    metric = toupper(str_extract(metric, "ppv|tpr|fpr"))  # Just keep the metric name
+  ) %>%
+  mutate(proxy_condition = factor(proxy_condition, 
+                                levels = c("Weak Proxy", 
+                                         "Medium Proxy", 
+                                         "Strong Proxy")),
+         metric = factor(metric,
+                         levels = c("PPV", "TPR", "FPR")))# %>%
+  #filter(metric == c("PPV"))
+
+metrics_df_threshold <- metrics_df_threshold %>%
+  mutate(proxy_condition = factor(proxy_condition, 
+                                levels = c("Weak Proxy", 
+                                         "Medium Proxy", 
+                                         "Strong Proxy")))
+
+condition_plot <- ggplot(metrics_long, aes(x = threshold, color = type)) +
+  stat_summary(
+    aes(y = value),
+    geom = "line",
+    fun = base::mean,
+    linewidth = 1
+  ) +
+  stat_summary(
+    aes(y = value),
+    geom = "linerange",
+    fun.data = mean_cl_normal,
+    fun.args = list(conf.int = 0.95),
+    alpha = 0.3
+  ) +
+    scale_x_continuous(name="Fairness Threshold", n.breaks=6) +
+    scale_y_continuous(limits = c(0, 1.0), breaks = seq(0, 1, by = 0.2), labels = scales::percent) +
+    scale_color_manual(values = c(
+        "Known Protected Attribute" = "#F8766D",
+        "Unknown Protected Attribute" = "#619CFF",
+        "Known Causal Mechanism" = "#00BE67"
+        ),
+        breaks = c(
+        "Unknown Protected Attribute",
+        "Known Protected Attribute",
+        "Known Causal Mechanism"
+        )) +
+  scale_fill_manual(values = c(
+        "Known Protected Attribute" = "#F8766D",
+        "Unknown Protected Attribute" = "#619CFF",
+        "Known Causal Mechanism" = "#00BE67"
+        ),
+        breaks = c(
+        "Baseline",
+        "Known Protected Attribute",
+        "Known Causal Mechanism"
+        )) +
+    theme_bw() + 
+    theme(
+        # Text elements
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        
+        # Legend
+        legend.position = "top",
+        legend.box = "horizontal",
+        legend.margin = margin(t = 10, b = 10),
+        
+        # Grid
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        
+        # Plot margins
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+        panel.border = element_blank(),
+    ) +
+    #geom_text(data = sig_points_main_threshold, 
+    #         aes(x = threshold, y = 1), 
+    #         label = "*", 
+    #         size = 5,
+    #         color = "black",
+    #         inherit.aes = FALSE) +
+    labs(color = "",  # Better legend title
+         fill = "") +
+  threshold_theme +
+  guides(color = guide_legend(nrow = 1, ncol = 4),
+       fill = guide_legend(nrow = 1, ncol = 4)) +
+  facet_nested(metric ~ proxy_condition, 
+               scales = "free", 
+               space = "free",
+               switch = "y",
+               labeller = labeller(
+                 metric = c(
+                   "PPV" = "PPV",
+                   "TPR" = "TPR",
+                   "FPR" = "FPR"
+                 ),
+                 proxy_condition = c(
+                   "Weak Proxy" = "Weak Proxy",
+                   "Medium Proxy" = "Medium Proxy",
+                   "Strong Proxy" = "Strong Proxy"
+                 )
+               )) +
+  theme(strip.text = element_text(size = 20, face="plain"),
+        strip.background = element_blank(),
+        strip.placement = "outside",
+        #strip.text = element_blank(),
+        panel.spacing.x = unit(1.25, "cm"),
+        panel.spacing.y = unit(0.75, "cm"),
+        legend.key.size = unit(1.5, "cm"),
+        legend.text = element_text(size = 17),
+        #legend.position = "none",
+        axis.ticks = element_blank(),
+        axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 20, margin = margin(t = 0.05, unit = "cm")),
+        axis.title.y = element_blank(),#element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_text(size = 20, margin = margin(t = 1, b = 1, unit = "cm")))
+
+condition_plot
+
+```
+
+```{r separate_plots_sensitivity, fig.height=3.5, fig.width = 5}
+# Separate facets
+splitFacet <- function(x){
+  facet_vars <- c(names(x$facet$params$rows), names(x$facet$params$cols))
+  x$facet    <- ggplot2::ggplot()$facet              
+  datasets   <- split(x$data, x$data[facet_vars])    
+  new_plots <- lapply(names(datasets), function(name) {
+    is_first_column <- grepl("Weak Proxy", name)
+    is_fpr_row <- grepl("FPR", name)
+    p <- x
+    p$data <- datasets[[name]]
+    p <- p + theme(
+      legend.position = "none",
+      axis.text.y = if(!is_first_column) element_blank() else element_text(size = 20),
+      axis.text.x = if(!is_fpr_row) element_blank() else element_text(size = 20),
+      axis.title.x = element_blank()
+    )
+    p
+  })
+}
+
+separate_plots <- splitFacet(condition_plot)
+separate_plots[4]
+separate_plots[5]
+separate_plots[7]
+separate_plots[8]
+```
+
+```{r separate_plots_sensitivity_yaxis, fig.height=3.5, fig.width = 5.73}
+separate_plots <- splitFacet(condition_plot)
+separate_plots[1]
+separate_plots[2]
+```
+
+```{r separate_plots_sensitivity_xaxis, fig.height=3.79, fig.width = 5}
+separate_plots <- splitFacet(condition_plot)
+separate_plots[6]
+separate_plots[9]
+```
+
+```{r separate_plots_sensitivity_corner, fig.height=3.79, fig.width = 5.73}
+separate_plots <- splitFacet(condition_plot)
+separate_plots[3]
+```
+
+```{r threshold-tpr-plot, fig.height=3.8, fig.width=14}
+
+condition_plot <- ggplot(metrics_df_threshold, aes(x = threshold)) +
+    stat_summary(aes(y = mean_tpr, group= "Baseline", color = "Baseline", fill = "Baseline"),
+                geom = "line", fun = base::mean, linewidth = 1.2) +
+    stat_summary(aes(y = mean_tpr, group= "Baseline", color = "Baseline"),
+                geom = "linerange", fun.data = mean_cl_normal, fun.args=list(conf.int=0.95), alpha = 0.3) +
+    # Third line (mean_reliability_belief)
+    stat_summary(aes(y = mean_tpr_belief, color = "Known Causal Mechanism", fill = "Known Causal Mechanism"),
+                geom = "line", fun = base::mean, linewidth = 1.2) +
+    stat_summary(aes(y = mean_tpr_belief, color = "Known Causal Mechanism"),
+                geom = "linerange", fun.data = mean_cl_normal, fun.args=list(conf.int=0.95), alpha = 0.3) +
+    # Second line (mean_reliability_protected)
+    stat_summary(aes(y = mean_tpr_protected, color = "Known Protected Att", fill = "Known Protected Att"),
+                geom = "line", fun = base::mean, linewidth = 1.2) +
+    stat_summary(aes(y = mean_tpr_protected, color = "Known Protected Att"),
+                geom = "linerange", fun.data = mean_cl_normal, fun.args=list(conf.int=0.95), alpha = 0.3) +
+    scale_x_continuous(name="Fairness Threshold", n.breaks=6) +
+    scale_y_continuous(name="TPR", limits = c(0, 1.0), breaks = seq(0, 1, by = 0.2), labels = scales::percent) +
+    scale_color_manual(values = c(
+        "Known Protected Att" = "#F8766D",
+        "Baseline" = "#619CFF",
+        "Known Causal Mechanism" = "#00BE67"
+        ),
+        breaks = c(
+        "Baseline",
+        "Known Protected Att",
+        "Known Causal Mechanism"
+        )) +
+  scale_fill_manual(values = c(
+        "Known Protected Att" = "#F8766D",
+        "Baseline" = "#619CFF",
+        "Known Causal Mechanism" = "#00BE67"
+        ),
+        breaks = c(
+        "Baseline",
+        "Known Protected Att",
+        "Known Causal Mechanism"
+        )) +
+    theme_bw() + 
+    theme(
+        # Text elements
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        
+        # Legend
+        legend.position = "top",
+        legend.box = "horizontal",
+        legend.margin = margin(t = 10, b = 10),
+        
+        # Grid
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        
+        # Plot margins
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+        panel.border = element_blank(),
+    ) +
+    #geom_text(data = sig_points_main_threshold, 
+    #         aes(x = threshold, y = 1), 
+    #         label = "*", 
+    #         size = 5,
+    #         color = "black",
+    #         inherit.aes = FALSE) +
+    labs(color = "",  # Better legend title
+         fill = "") +
+  threshold_theme +
+  guides(color = guide_legend(nrow = 1, ncol = 4),
+       fill = guide_legend(nrow = 1, ncol = 4)) +
+  facet_nested(. ~ proxy_condition, scales = "free", space = "free") +
+  theme(legend.position = "none",
+        strip.background = element_blank(),
+        strip.text = element_blank(),
+        panel.spacing.x = unit(1.25, "cm"),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 20),
+        axis.ticks = element_blank(),
+        axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_blank(),
+        axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_blank())
+
+condition_plot
+
+```
+
+```{r threshold-fpr-plot, fig.height=5.2, fig.width=14}
+
+metrics_df_threshold <- metrics_df_threshold %>%
+  mutate(proxy_condition = factor(proxy_condition, 
+                                levels = c("Weak Proxy", 
+                                         "Medium Proxy", 
+                                         "Strong Proxy")))
+
+condition_plot <- ggplot(metrics_df_threshold, aes(x = threshold)) +
+    stat_summary(aes(y = mean_fpr, group= "Baseline", color = "Baseline", fill = "Baseline"),
+                geom = "line", fun = base::mean, linewidth = 1.2) +
+    stat_summary(aes(y = mean_fpr, group= "Baseline", color = "Baseline"),
+                geom = "linerange", fun.data = mean_cl_normal, fun.args=list(conf.int=0.95), alpha = 0.3) +
+    # Third line (mean_reliability_belief)
+    stat_summary(aes(y = mean_fpr_belief, color = "Known Causal Mechanism", fill = "Known Causal Mechanism"),
+                geom = "line", fun = base::mean, linewidth = 1.2) +
+    stat_summary(aes(y = mean_fpr_belief, color = "Known Causal Mechanism"),
+                geom = "linerange", fun.data = mean_cl_normal, fun.args=list(conf.int=0.95), alpha = 0.3) +
+    # Second line (mean_reliability_protected)
+    stat_summary(aes(y = mean_fpr_protected, color = "Known Protected Att", fill = "Known Protected Att"),
+                geom = "line", fun = base::mean, linewidth = 1.2) +
+    stat_summary(aes(y = mean_fpr_protected, color = "Known Protected Att"),
+                geom = "linerange", fun.data = mean_cl_normal, fun.args=list(conf.int=0.95), alpha = 0.3) +
+    scale_x_continuous(name="Fairness Threshold", n.breaks=6) +
+    scale_y_continuous(name="FPR", limits = c(0, 1.0), breaks = seq(0, 1, by = 0.2), labels = scales::percent) +
+    scale_color_manual(values = c(
+        "Known Protected Att" = "#F8766D",
+        "Baseline" = "#619CFF",
+        "Known Causal Mechanism" = "#00BE67"
+        ),
+        breaks = c(
+        "Baseline",
+        "Known Protected Att",
+        "Known Causal Mechanism"
+        )) +
+  scale_fill_manual(values = c(
+        "Known Protected Att" = "#F8766D",
+        "Baseline" = "#619CFF",
+        "Known Causal Mechanism" = "#00BE67"
+        ),
+        breaks = c(
+        "Baseline",
+        "Known Protected Att",
+        "Known Causal Mechanism"
+        )) +
+    theme_bw() + 
+    theme(
+        # Text elements
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        
+        # Legend
+        legend.position = "top",
+        legend.box = "horizontal",
+        legend.margin = margin(t = 10, b = 10),
+        
+        # Grid
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        
+        # Plot margins
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+        panel.border = element_blank(),
+    ) +
+    #geom_text(data = sig_points_main_threshold, 
+    #         aes(x = threshold, y = 1), 
+    #         label = "*", 
+    #         size = 5,
+    #         color = "black",
+    #         inherit.aes = FALSE) +
+    labs(color = "",  # Better legend title
+         fill = "") +
+  threshold_theme +
+  guides(color = guide_legend(nrow = 1, ncol = 4),
+       fill = guide_legend(nrow = 1, ncol = 4)) +
+  facet_nested(. ~ proxy_condition, scales = "free", space = "free") +
+  theme(legend.position = "none",
+        strip.background = element_blank(),
+        strip.text = element_blank(),
+        panel.spacing.x = unit(1.25, "cm"),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 20),
+        axis.ticks = element_blank(),
+        axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 20, margin = margin(t = 0.05, unit = "cm")),
+        axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_text(size = 25, margin = margin(t = 1, b = 1, unit = "cm")))
+
+condition_plot
+
+```
+
+
+```{r threshold-plot-proteted_worse, fig.height=11, fig.width=12}
+
+metrics_df_long <- metrics_df_threshold %>%
+  pivot_longer(
+    cols = c(
+      mean_reliability, mean_reliability_protected,
+      mean_reliability_unfair, mean_reliability_fair,
+      mean_reliability_protected_unfair, mean_reliability_protected_fair
+    ),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  mutate(
+    judgment_type = ifelse(grepl("unfair", metric), "Unfair Claims", ifelse(grepl("fair", metric), "Fair Claims", "All Claims")),
+    knowledge_type = ifelse(grepl("protected", metric), "Known Protected Att", "Baseline")
+  )
+
+# Then create the plot
+condition_plot <- ggplot(metrics_df_long, aes(x = threshold, color = knowledge_type, fill = knowledge_type)) +
+    stat_summary(aes(y = value),
+                geom = "line", fun = base::mean, linewidth = 1) +
+    stat_summary(aes(y = value),
+                geom = "ribbon", fun.data = mean_cl_normal, fun.args=list(conf.int=0.95), alpha = 0.3) +
+    facet_nested(proxy_condition ~  judgment_type) +
+    scale_x_continuous(name = "Fairness Threshold", n.breaks = 5) +
+    scale_y_continuous(name = "Auditing Performance", 
+                      limits = c(0, 1.0), 
+                      breaks = seq(0, 1, by = 0.2), 
+                      labels = scales::percent) +
+    scale_color_manual(values = c(
+        "Known Protected Att" = "#F8766D",
+        "Baseline" = "#619CFF"
+    )) +
+    scale_fill_manual(values = c(
+        "Known Protected Att" = "#F8766D",
+        "Baseline" = "#619CFF"
+    )) +
+    theme_bw() + 
+    theme(
+        # Text elements
+        plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 12),
+        
+        # Legend
+        legend.position = "top",
+        legend.box = "horizontal",
+        legend.margin = margin(t = 10, b = 10),
+        
+        # Grid
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        
+        # Plot margins
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+        panel.border = element_blank(),
+    ) +
+    #geom_text(data = sig_points_main_threshold, 
+    #         aes(x = threshold, y = 1), 
+    #         label = "*", 
+    #         size = 5,
+    #         color = "black",
+    #         inherit.aes = FALSE) +
+    labs(color = "",  # Better legend title
+         fill = "") +
+    threshold_theme +
+  theme(strip.text = element_text(size = 20, face = "bold"),
+        panel.spacing.x = unit(1.5, "cm"),
+        panel.spacing.y = unit(0.5, "cm"),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 20),
+        axis.ticks = element_blank(),
+        axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 20, margin = margin(t = 0.05, unit = "cm")),
+        axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_text(size = 25, margin = margin(t = 1, b = 1, unit = "cm")),
+        plot.title = element_text(size = 25, margin = margin(t = 0.25, b = 0.5, unit = "cm"), hjust = 0.5, face = "bold"))
+
+condition_plot
+
+```
+
+
+```{r threshold-plot-dag_worse, fig.height=11, fig.width=12}
+
+metrics_df_long <- metrics_df_threshold %>%
+  pivot_longer(
+    cols = c(
+      mean_reliability, mean_reliability_belief,
+      mean_reliability_unfair, mean_reliability_fair,
+      mean_reliability_belief_unfair, mean_reliability_belief_fair
+    ),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  mutate(
+    judgment_type = ifelse(grepl("unfair", metric), "Unfair Claims", ifelse(grepl("fair", metric), "Fair Claims", "All Claims")),
+    knowledge_type = ifelse(grepl("belief", metric), "Known Causal Mechanism", "Baseline")
+  )
+
+# Then create the plot
+condition_plot <- ggplot(metrics_df_long, aes(x = threshold, color = knowledge_type, fill = knowledge_type)) +
+    stat_summary(aes(y = value),
+                geom = "line", fun = base::mean, linewidth = 1) +
+    stat_summary(aes(y = value),
+                geom = "ribbon", fun.data = mean_cl_normal, fun.args=list(conf.int=0.95), alpha = 0.3) +
+    facet_nested(proxy_condition ~ judgment_type) +
+    scale_x_continuous(name = "Fairness Threshold", n.breaks = 5) +
+    scale_y_continuous(name = "Auditing Performance", 
+                      limits = c(0, 1.0), 
+                      breaks = seq(0, 1, by = 0.2), 
+                      labels = scales::percent) +
+    scale_color_manual(values = c(
+        "Known Causal Mechanism" = "#00BE67",
+        "Baseline" = "#619CFF"
+    )) +
+    scale_fill_manual(values = c(
+        "Known Causal Mechanism" = "#00BE67",
+        "Baseline" = "#619CFF"
+    )) +
+    theme_bw() + 
+    theme(
+        # Text elements
+        plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 12),
+        
+        # Legend
+        legend.position = "top",
+        legend.box = "horizontal",
+        legend.margin = margin(t = 10, b = 10),
+        
+        # Grid
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        
+        # Plot margins
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+        panel.border = element_blank(),
+    ) +
+    #geom_text(data = sig_points_main_threshold, 
+    #         aes(x = threshold, y = 1), 
+    #         label = "*", 
+    #         size = 5,
+    #         color = "black",
+    #         inherit.aes = FALSE) +
+    labs(color = "",  # Better legend title
+         fill = "") +
+    threshold_theme +
+  theme(strip.text = element_text(size = 20, face = "bold"),
+        panel.spacing.x = unit(1.5, "cm"),
+        panel.spacing.y = unit(0.5, "cm"),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 20),
+        axis.ticks = element_blank(),
+        axis.text.y = element_text(size = 20, margin = margin(r = 0.05, unit = "cm")),
+        axis.text.x = element_text(size = 20, margin = margin(t = 0.05, unit = "cm")),
+        axis.title.y = element_text(size = 25, margin = margin(r = 1, unit = "cm")),
+        axis.title.x = element_text(size = 25, margin = margin(t = 1, b = 1, unit = "cm")),
+        plot.title = element_text(size = 25, margin = margin(t = 0.25, b = 0.5, unit = "cm"), hjust = 0.5, face = "bold"))
+
+condition_plot
+
+```
+
+
+```{r barplots, out.height="30%", out.width="100%"}
+fair_df <- round_df %>%
+  group_by(pid) %>%
+  summarize(
+    did = n(),
+    mean_fair = mean(judgement == "FAIR"),
+    mean_fair_on_fair = sum(judgement == "FAIR" & robot_observed_fairness == T) / sum(robot_observed_fairness == T),
+    mean_fair_on_unfair = sum(judgement == "FAIR" & robot_observed_fairness != T) / sum(robot_observed_fairness != T),
+    decision_id = decision_id,
+    condition = condition) %>%
+  filter(decision_id == did) %>%
+  select(-did, -decision_id)
+
+# Transform data to long format
+fair_df_long <- fair_df %>%
+  pivot_longer(
+    cols = c(mean_fair, mean_fair_on_fair, mean_fair_on_unfair),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  mutate(metric = factor(metric, 
+    levels = c("mean_fair", "mean_fair_on_fair", "mean_fair_on_unfair"),
+    labels = c("Overall", "No Proxy CE", "Proxy Only CE")))
+
+# Calculate means and CIs for each metric
+mean_data_long <- fair_df_long %>%
+  group_by(condition, metric) %>%
+  summarize(
+    n = n(),
+    mean_val = mean(value),
+    se = sqrt((mean_val * (1 - mean_val)) / n),
+    ci_lower = pmax(0, mean_val - 1.96 * se),
+    ci_upper = pmin(1, mean_val + 1.96 * se),
+    .groups = "drop"
+  )
+  
+combined_plot_horizontal <- ggplot() +
+  geom_col(data = mean_data_long, aes(x = condition, y = mean_val, fill=metric), 
+           position = position_dodge(width = 0.9), width = 0.9) +
+  geom_errorbar(data = mean_data_long, 
+                aes(x = condition, ymin = ci_lower, ymax = ci_upper, group=metric), 
+                position = position_dodge(width = 0.9), width = 0.6) +
+  geom_point(data = fair_df_long, 
+             aes(x = condition, y = value, fill = metric), 
+             position = position_jitterdodge(jitter.width = 0.4, dodge.width = 0.9), 
+             shape = 21, size = 2, color = "black") +
+  geom_text(data = mean_data_long, 
+            aes(x = as.numeric(as.factor(condition)) + 0.1, y = mean_val, group=metric,
+                label = sprintf("%.0f%%", mean_val * 100)),
+            position = position_dodge2(width = 0.9),
+            hjust = -0.3, # Changed from vjust to hjust since we're flipping coordinates
+            size = 4, color = "black") +
+  labs(title = "Proportions of Fair Judgments", 
+       x = "Type of CE", # These will be flipped
+       y = "Proportion") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 6)) +
+  scale_y_continuous(
+    labels = scales::percent_format(scale = 100),
+    limits = c(0, 1)
+  ) +
+  theme_bw() +
+  heatmap_theme_horizontal +
+  coord_flip() # This flips the coordinates to make the plot horizontal
+
+combined_plot_horizontal
+```
+
+
+\newpage
+# Deployment Times
+```{r deployment-times, warning=FALSE, message=FALSE}
+
+times_condition_plot <- ggplot(round_df, aes(x = decision_id, y = prediction_time, color = "black")) +
+    geom_line(data=round_df, aes(x=decision_id, y=prediction_time, group=pid, color = "black")) +
+    scale_x_continuous(name="Number of Predictions", n.breaks=py$n_total_robots, limits=c(1, py$n_total_robots)) +
+    scale_y_continuous(name="Seconds") + 
+    scale_colour_manual(values = c('prediction_time' = 'black')) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5, size=12), legend.position = "top",
+          panel.border = element_blank()) +
+    facet_grid(condition ~ .)
+
+times_condition_plot
+```
+
+# Probing Times
+```{r probing-times, warning=FALSE, message=FALSE}
+probing_df = data.frame(probing_df) %>%
+    mutate(condition = str_wrap(condition, width = 6),
+           decision_id = rep(1:py$n_probing, nrow(participant_df)))
+
+probing_times_condition_plot <- ggplot(probing_df, aes(x = decision_id, y = prediction_time, color = "black")) +
+    geom_line(data=probing_df, aes(x=decision_id, y=prediction_time, group=pid, color = "black")) +
+    scale_x_continuous(name="Number of Probing Robots", n.breaks=py$n_probing) +
+    scale_y_continuous(name="Seconds") + 
+    scale_colour_manual(values = c('prediction_time' = 'black')) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5, size=12), legend.position = "top",
+          panel.border = element_blank()) +
+    facet_grid(condition ~ .)
+
+probing_times_condition_plot
+```

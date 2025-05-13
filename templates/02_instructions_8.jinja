@@ -1,0 +1,42 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Prediction Fairness') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+        <p>
+            <ul>
+            {% if params['explanation'] == 'CE' %}
+            <li> In another example below, changing HeadShape and switching the BaseType from Legs to Wheels in the picture modifies the prediction.</li>
+            <li> Company type seems to be irrelevant here. </li>
+            {% else %}
+            <li> In another example below, the sticker retains high influence on the prediction but even if it was changed, and went the opposite direction, other parts already determine the prediction as Defective. </li>
+            {% endif %}
+            <li> This makes the prediction depend on robot parts -- making it <b>FAIR</b>.</li>
+            </ul>
+        </p>
+
+        <p>
+            {% if params['explanation'] == 'CE' %}
+                <div class="imgContainer">
+                    <img src='{{ "../static/images/branding_fair.png" }}' alt="Fair decision"
+                         style='width: 75%; padding-top: 10px; padding-bottom: 10px; object-fit: contain'/>
+                </div>
+            {% else %}
+                <div class="imgContainer">
+                    <img src='{{ "../static/images/branding_fair_shap.png" }}' alt="Fair decision"
+                         style='width: 85%; padding-top: 10px; padding-bottom: 10px; object-fit: contain'/>
+                </div>
+            {% endif %}
+        </p>
+
+    </div>
+
+    <hr />
+
+    {% include 'includes/next.jinja' %}
+
+</div>

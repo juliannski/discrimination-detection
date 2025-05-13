@@ -1,0 +1,35 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Comprehension Quiz') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+    <form action="/quiz" method="POST" role="form">
+        {% for question in form %}
+              {%  if "png" in question.id %}
+              <div class="question">
+                  <div class="imgContainer"><img src='{{ question.id }}' alt="Sth" style='width: 40%; object-fit: contain'/></div>
+                  <h4 style="font-weight: bold">{{ question.label }}</h4>
+              </div>
+              {%  else %}
+              <div class="question">
+                <h4 style="font-weight: bold">{{ question.label }}</h4>
+              </div>
+              {% endif %}
+              <div class = "answer">
+                {{ question }}
+              </div>
+              <br>
+        {% endfor %}
+        <input type="submit" value="Submit" class="btn btn-primary btn-lg continue" onclick="window.clickedNext=true;"/>
+    </form>
+
+    </div>
+
+    <hr />
+
+</div>

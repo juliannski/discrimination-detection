@@ -1,0 +1,31 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Robots') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        <p>
+            NASA is sending a team of robots to Mars next year!
+            <ul>
+            <li>The robots are built from different parts you can see listed in the robot pictures below</li>
+            </ul>
+        </p>
+
+        <p>
+        <div class="imgContainer">
+            <img src='{{ "../static/images/robot_feats.png" }}' alt="Robot features"
+                 style='width: 65%; padding-top: 10px; padding-bottom: 10px; object-fit: contain;'/>
+        </div>
+        </p>
+
+    </div>
+
+    <hr />
+
+    {% include 'includes/next.jinja' %}
+
+</div>

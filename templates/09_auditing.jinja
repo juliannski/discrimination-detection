@@ -1,0 +1,109 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% include 'includes/robot_guide.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+    <script>
+        setTimeout(function(){$('#robot2').fadeIn()}, 1000);//wait 5 sec
+    </script>
+    <style>
+        .wrapper:after {
+           content: "";
+           position: absolute;
+           top: 0;
+           left: calc({% if cf_robot_urls|length > 1 and params['CE_method'] == "competing" %}37.5%{% else %}50%{% endif %} - 1px);
+           height: 100%;
+           border-right: 2px solid black;
+        }
+    </style>
+</head>
+{{ macros.navigation_bar(page_title = 'Audit '+ (index|string) +"/"+(total|string), include_robot_guide=True) }}
+
+<div id="page-content" style="max-width: 1400px">
+
+    <div class="instructions-white">
+        <p>
+            Is the algorithm fair or unfair {% if params['explanation'] == 'CE' %}when it changes its prediction based on the opaque parts?{% else %}based on the provided explanation?{% endif %}
+        </p>
+
+    </div>
+
+    <div class="instructions" style="max-width: 1400px;">
+
+        <p>
+            <div class="wrapper">
+                <div class="imgContainer" style="padding-left: {% if cf_robot_urls|length > 1 and params['CE_method'] == "competing"  %}12.5%{% else %}25%{% endif %}; max-width: 50%;">
+                    <div class="img-no-buttons" style="color: #ffffff; padding-bottom: 5%">
+                    <span-neg>> {{ robot.prediction_str }} </span-neg>
+                    </div>
+                    <div class="img-robot">
+                    <img src='{{ "../" + robot.robot_url }}' alt="Robot 1"/>
+                    </div>
+                </div>
+                {% if params['explanation'] == 'CE' %}
+                    <div class="imgContainer" id="robot2" style="display: none; max-width: 50%; padding-left: 11%;">
+                        {% if cf_robot_urls|length > 1 and params['CE_method'] == "competing" %}
+                            <div class="img-no-buttons" style="color: #ffffff; padding-left: 11%; padding-bottom: 2.75%">
+                                <span-pos>> {{ robot.cf_prediction_str }}</span-pos>
+                            </div>
+                        {% else %}
+                            <div class="img-no-buttons" style="color: #ffffff; padding-bottom: 5%">
+                                <span-pos>> {{ robot.cf_prediction_str }}</span-pos>
+                            </div>
+                        {% endif %}
+                        {%  if cf_robot_urls|length > 1 and params['CE_method'] == "competing" %}
+                            <div style="width: 200%; text-align: left;">
+                                <p style="position: absolute; left: {% if cf_robot_urls|length > 1 and params['CE_method'] == "competing" %}67.5%{% else %}75.5%{% endif %}; margin-top: 10px; font-size: x-large; font-weight: bold">OR</p>
+                                <div class="img-robot">
+                                <img src='{{ '../' + cf_robot_urls[0] }}' alt="Robot 2"/>
+                                </div>
+                                <div class="img-robot" style="margin-left: 5%">
+                                <img src='{{ '../' + cf_robot_urls[1] }}' alt="Robot 2"/>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="img-robot">
+                                <img src='{{ '../' + cf_robot_urls[0] }}' alt="Robot 2"/>
+                            </div>
+                        {%  endif %}
+                    </div>
+                {% else %}
+                    <div class="imgContainer" id="robot2" style="display: none; padding-left: 11%;">
+                        <div id="explanation">
+                            <center><h3><b>NASA Explanation:</b></h3></center>
+                            {{ macros.print_shap_explanation(feature_importance=params['shap_explanation']["feature_importance"],
+                                                             mean_val=params['shap_explanation']["mean_val"],
+                                                             max_negative=params['shap_explanation']["max_negative_shap_sum"],
+                                                             index = 0) }}
+                        </div>
+                    </div>
+                {% endif %}
+
+            </div>
+
+            <center>
+            <div class="imgContainer" style="padding-left: -5%; width: 50%; padding-top: 3%">
+                <form action="{{ next_page }}" method="POST">
+                       <input type="submit" name="decision" value="FAIR" class="btn btn-fair btn-lg"
+                              id="fair-btn"
+                              style="visibility:hidden; width: 25%; font-size: inherit; margin-right: 20px" onclick="window.clickedNext=true;">
+                       <button class="btn btn-lg btn-success" id="ready-btn">I'm ready to audit</button>
+                       <input type="submit" name="decision" value="UNFAIR" class="btn btn-unfair btn-lg"
+                              id="unfair-btn"
+                              style="visibility:hidden; width: 25%; font-size: inherit" onclick="window.clickedNext=true;">
+                </form>
+            </div>
+            </center>
+        </p>
+    </div>
+</div>
+
+<script>
+    let readyButton = document.getElementById("ready-btn");
+    let fairButton = document.getElementById("fair-btn");
+    let unfairButton = document.getElementById("unfair-btn");
+    readyButton.addEventListener("click", function() {
+        fairButton.style.visibility = "visible";
+        unfairButton.style.visibility = "visible";
+        this.remove();
+    });
+</script>

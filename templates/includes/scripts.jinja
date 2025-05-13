@@ -1,0 +1,52 @@
+<script type="text/javascript">
+
+      function leave_experiment() {
+      if (confirm("Are you sure you want to leave the study? If you click OK, you will not receive any compensation for " +
+                  "your time, and you will not be allowed to take the experiment again.") == true) {
+          window.location.href="{{ url_for('debrief', status = 'incomplete')}}"
+          window.clickedNext = true;
+       }
+      }
+
+    // hide and show robot guide
+    const toggleRobotGuide = () => {
+      var x = document.getElementById("robot-guide");
+      if (x.style.display === "none" || x.style.display === "") {
+        x.style.display = "block";
+      } else {
+        x.style.display = "none";
+      }
+    }
+
+
+    // close Modal with Click
+    const closeModal = () => {
+        this.parent.style.display = "none";
+    }
+
+
+    const hideImage2 = () => {
+        document.getElementById("cheatsheetModal2").style.display ='none';
+        document.getElementById("model_img").onclick = showImage2;
+        return 'none'
+    }
+
+    const showImage2 = () => {
+        document.getElementById("cheatsheetModal2").style.display ='block';
+        document.getElementById("model_img").onclick = hideImage2;
+        return 'block'
+    }
+
+    window.clickedNext = false;
+
+    window.onbeforeunload = function() {
+        if(!window.clickedNext) {
+            setTimeout(function() {
+                if (!window.clickedNext) {
+                    window.opener.postMessage('popup_closed', '*');
+                }
+            }, 0);
+        }
+    };
+
+</script>

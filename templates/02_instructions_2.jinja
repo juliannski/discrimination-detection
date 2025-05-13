@@ -1,0 +1,31 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Robots') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        <p>
+            <ul>
+            <li>Unfortunately, practice missions revealed that only some robots are <span class="txt-more">RELIABLE</span> and succeed.</li>
+            <li>Other robots are <span class="txt-less">DEFECTIVE</span> due to one or more parts that lead them to break down on Mars.</li>
+            </ul>
+        </p>
+
+        <p>
+        <div class="imgContainer">
+            <img src='{{ "../static/images/robots.png" }}' alt="Sample robots"
+                 style='width: 65%; padding-top: 10px; padding-bottom: 10px; object-fit: contain;'/>
+        </div>
+        </p>
+
+    </div>
+
+    <hr />
+
+    {% include 'includes/next_prev.jinja' %}
+
+</div>

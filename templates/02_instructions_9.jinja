@@ -1,0 +1,37 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Prediction Fairness Continued') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        <p>
+            When explanations contain multiple images, any of them would change the prediction to reliable. If any one
+            is unfair, then so is the prediction. For instance:
+            <ul>
+            <li> The prediction below can still be modified <b>by changing the Company sticker</b> alone.</li>
+            <li> This is shown in the 2nd image in the explanation</li>
+            <li> Once again, this prediction can be changed based on the Company type -- making it <b>UNFAIR</b>. </li>
+            </ul>
+        </p>
+
+        <p>
+        <div class="imgContainer">
+            <img src='{{ "../static/images/branding_unfair2.png" }}' alt="Unfair decision"
+                 style='width: 85%; padding-top: 10px; padding-bottom: 10px; object-fit: contain'/>
+        </div>
+
+        <p>
+            Click 'Next' to train your understanding of fairness.
+        </p>
+
+    </div>
+
+    <hr />
+
+    {% include 'includes/next.jinja' %}
+
+</div>

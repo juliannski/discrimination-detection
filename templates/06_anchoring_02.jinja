@@ -1,0 +1,30 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Robot Guide') }}
+
+
+<div id="page-content">
+
+    <div class="instructions">
+
+        <p>
+            <b>NASA suspects their algorithm may make <b>UNFAIR</b> predictions. </b>
+            <ul>
+                <li> They think so because for some pictures, manipulating the <b>{{ params['proxy'] }} flips the prediction</b>. </li>
+                <li> But {{ params['proxy'] }}s have a higher chance of occurring for robots made by Company S. </li>
+                <li> The algorithm may thus treat the {{ params['proxy'] }} like the Company sticker, and some predictions can be based on Company type. </li>
+            </ul>
+        </p>
+
+        <div class="center-on-page" style="max-width: 95%; margin: auto">
+            {{ macros.print_robot_guide(params['anchoring'][0], params['anchoring'][1]) }}
+        </div>
+
+    <hr />
+    </div>
+
+    {% include 'includes/next.jinja' %}
+
+</div>

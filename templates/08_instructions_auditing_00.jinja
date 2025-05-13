@@ -1,0 +1,24 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% include 'includes/robot_guide.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+    <script>
+        setTimeout(function(){$('#robot2').fadeIn()}, 1000);//wait 5 sec
+    </script>
+</head>
+{{ macros.navigation_bar(page_title = 'Congratulations!', include_robot_guide=True, color="green") }}
+
+<div id="page-content">
+
+    <div class="instructions">
+        <p>
+            NASA is impressed! You did a great job and you can become NASA's <b>fairness auditor</b>.
+        </p>
+
+    </div>
+
+	<hr/>
+
+    {% include 'includes/next.jinja' %}
+
+</div>

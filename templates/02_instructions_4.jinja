@@ -1,0 +1,61 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Prediction Explanations') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        {% if params['explanation'] == 'CE' %}
+            <p>
+                <ul>
+                    <li> The algorithm also provides <b>an explanation</b> when its prediction says <span class="txt-less">Defective</span>.</li><br>
+                <li> The explanation has the following form:
+                    <ul><li>"The robot was predicted Defective because the following parts did not fit the rest: &lt;list of parts&gt;."</li>
+                        <li>"If these parts were changed, the robot would be predicted Reliable"</li></ul><br>
+                <li> For your convenience, the algorithm highlights which parts should change in a separate image</li>
+                </ul>
+            </p>
+
+            <div class="imgContainer">
+                <img src='{{ "../static/images/explanation.png" }}' alt="Sample explanation"
+                     style='width: 80%; padding-top: 10px; padding-bottom: 10px; object-fit: contain'/>
+            </div>
+            <br>
+            <p>
+                In this explanation, <b>the antenna and the head opaque</b> because they need to change to modify the prediction. Other body parts are transparent because they can stay the same.
+            </p>
+        {% elif params['explanation'] == 'SHAP' %}
+            <p>
+                <ul>
+                    <li> The algorithm also provides <b>an explanation</b> when its prediction says <span class="txt-less">Defective</span></li><br>
+                <li> The NASA Explanation is a plot that shows how each robot part influences the prediction:
+                    <ul>
+                        <li><span style="color: #d43f3a">Red</span> bar pointing left means that a part influences the prediction toward <span class="txt-less">Defective</span></li>
+                        <li><span style="color: #3c763d">Green</span> bars pointing right means that a part influences the prediction toward <span class="txt-more">Reliable</span></li>
+                        <li>The longer the bar and the higher the value inside the bar, the stronger the influence towards a given prediction.</li>
+                    </ul>
+                </li>
+                <li> You can see a sample explanation below.</li>
+                </ul>
+            </p>
+
+            <div class="imgContainer">
+                <img src='{{ "../static/images/explanation_shap.png" }}' alt="Sample explanation"
+                     style='width: 80%; padding-top: 10px; padding-bottom: 10px; object-fit: contain'/>
+            </div>
+            <br>
+            <p>
+                In this explanation, <b>the lack of Antenna</b> strongly influences the prediction toward Defective, followed by Square BodyShape, and Legs BaseType. Only <b>Round HeadShape</b> influences the prediction toward Reliable.
+            </p>
+        {% endif %}
+
+    </div>
+
+    <hr />
+
+    {% include 'includes/next_prev.jinja' %}
+
+</div>

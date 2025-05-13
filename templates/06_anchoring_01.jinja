@@ -1,0 +1,29 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Robot Guide') }}
+
+
+<div id="page-content">
+
+    <div class="instructions">
+
+        <p>
+            <ul>
+                <li> Here are the pictures of some <b>common robots from both companies</b> that we took after removing their stickers.</li>
+                <li> Although they are built using the <b>same parts, having {{ params['proxy'] }}s</b> seems more characteristic to Company S. </li>
+                <li> <b>You'll be able to access this "Robot Guide" for the remainder of the study.</b>. </li>
+            </ul>
+        </p>
+
+        <div class="center-on-page" style="max-width: 95%; margin: auto">
+            {{ macros.print_robot_guide(params['anchoring'][0], params['anchoring'][1]) }}
+        </div>
+
+    <hr />
+    </div>
+
+    {% include 'includes/next.jinja' %}
+
+</div>

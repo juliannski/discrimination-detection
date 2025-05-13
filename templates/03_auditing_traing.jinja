@@ -1,0 +1,245 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
+    <script>
+        setTimeout(function(){$('#robot2').fadeIn()}, 1000);//wait 5 sec
+    </script>
+</head>
+{{ macros.navigation_bar(page_title = 'Fairness Training') }}
+
+<div id="page-content" style="max-width: 1400px">
+
+	<div class="instructions-white">
+        <p>
+            The algorithm predicts the robot in the picture on the left is <b>DEFECTIVE</b>.
+            {% if params['explanation'] == 'CE' %}
+            Its explanation shows you how to change the robot parts in the picture to modify this prediction to <b>RELIABLE</b>.
+            {% else %}
+            Its explanation shows you the influence of each robot part in the image for the algorithm's prediction.
+            {% endif %}
+            Is the algorithm fair or unfair?
+        </p>
+
+        <p>
+            Click on the appropriate button.
+        </p>
+
+    </div>
+
+    <div class="instructions" style="max-width: 1400px;">
+
+            <div class="wrapper">
+                <div class="imgContainer" style="padding-left: 25%; max-width: 50%;">
+                    <div class="img-no-buttons" style="color: #ffffff; padding-bottom: 5%">
+                        <span-neg>> DEFECTIVE </span-neg>
+                    </div>
+                    <div class="img-robot">
+                        <img src='{{ "../" + robot_url }}' alt="Robot 1"/>
+                    </div>
+                </div>
+                <div class="imgContainer" id="robot2" style="display: none; max-width: 50%; padding-left: 11%;">
+                    {% if  params['explanation'] == 'CE' and (example_num == 3 or example_num == 4) %}
+                        <div class="img-no-buttons" style="color: #ffffff; padding-left: 11%; padding-bottom: 14px;">
+                            <span-pos>> RELIABLE </span-pos>
+                        </div>
+                    {% else %}
+                        {% if params['explanation'] == 'CE' %}
+                            <div class="img-no-buttons" style="color: #ffffff; padding-bottom: 5%">
+                                <span-pos>> RELIABLE </span-pos>
+                            </div>
+                        {% else %}
+                            <center><h3><b>NASA Explanation:</b></h3></center>
+                        {% endif %}
+                    {% endif %}
+                    {%  if params['explanation'] == 'CE' and (example_num == 3 or example_num == 4) %}
+                        <div style="width: 200%; text-align: left;">
+                            <p style="position: absolute; left: 75.5%; margin-top: 10px; font-size: x-large; font-weight: bold">OR</p>
+                            <div class="img-robot">
+                            <img src='{{ '../' + robot_cf_url }}' alt="Robot 2"/>
+                            </div>
+                            <div class="img-robot" style="margin-left: 5%">
+                            <img src='{{ '../' + add_robot_url }}' alt="Robot 2"/>
+                            </div>
+                        </div>
+                    {% else %}
+                        {% if params['explanation'] == 'CE' %}
+                            <div class="img-robot">
+                                <img src='{{ '../' + robot_cf_url }}' alt="Robot 2"/>
+                            </div>
+                        {% else %}
+                            <div class="imgContainer" style="padding-left: -6%">
+                                <img src='{{ '../static/images/test_shap_' + example_num|string + '.png' }}' alt="Shap test" style="width:100%"/>
+                            </div>
+                        {% endif %}
+                    {%  endif %}
+                </div>
+            </div>
+
+        <dialog id="response-dialog" style="flex-direction: column; align-content: center; justify-content: center; max-width: 50%; border-radius: 20px; background: white; font-size: larger; text-align: center;">
+            <div style="flex: 1;">
+            <p id="feedback-text"></p>
+            {% if params['explanation'] == 'CE' %}
+                <div class="imgContainer" id="robot-dialog">
+                    <div class="img-no-buttons" style="color: #ffffff">
+                        <span-pos>> RELIABLE </span-pos>
+                    </div>
+                    {% if example_num == 3 or example_num == 4 %}
+                        <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+                            <p style="font-size: x-large; font-weight: bold">OR</p>
+                            <div style="display: flex; justify-content: center; gap: 20px; width: 100%;">
+                                <div class="img-robot-dialog">
+                                    <img src='{{ '../' + robot_cf_url }}' alt="Robot 2" style="width: 200px"/>
+                                </div>
+                                <div class="img-robot-dialog">
+                                    <img src='{{ '../' + add_robot_url }}' alt="Robot 2" style="width: 200px"/>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="img-robot-dialog">
+                            <img src='{{ '../' + robot_cf_url }}' alt="Robot 2" style="width: 200px"/>
+                        </div>
+                    {% endif %}
+                </div>
+            {% else %}
+                <div class="imgContainer">
+                    <img src='{{ '../static/images/test_shap_' + example_num|string + '.png' }}' alt="Shap test" style="width:95%"/>
+                </div>
+            {% endif %}
+            </div>
+            <div style="margin-top: 20px;">
+            <button id="close-dialog" class="btn btn-primary btn-lg continue" onclick="closeFeedbackDialog(); window.clickedNext=true">Next</button>
+            </div>
+        </dialog>
+
+        <center>
+        <div class="confirmation-button-box" style="padding-left: -5%; width: 50%; padding-top: 3%">
+            <button class="btn btn-primary btn-lg btn-fair" onclick="showFeedback('{{ robot_url }}', 0);" style="width: 25%; font-size: inherit">FAIR</button>
+            <button class="btn btn-primary btn-lg btn-unfair" onclick="showFeedback('{{ robot_url }}', 1);" style="width: 25%; object-fit: contain">UNFAIR</button>
+            <form action="{{ next_page }}" method="POST">
+                  <input type="hidden" name="decision" value="FAIR" style="display: none">
+                  <input type="hidden" name="decision" value="UNFAIR" style="display: none">
+            </form>
+        </div>
+        </center>
+    </div>
+
+<script>
+    let dialog = document.getElementById('response-dialog');
+    let feedbackText = document.getElementById('feedback-text');
+    function showFeedback(robot_url, button) {
+
+        let feedbackMessage = '';
+        let feedbackClass = '';
+
+         if (robot_url.includes('0')) {
+            if (button == 1) {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "CORRECT! To modify the algorithm's prediction, it was sufficient to change the Company sticker. That is why the algorithm was unfair.";
+                {% else %}
+                    feedbackMessage = "CORRECT! Company sticker was the only robot part influencing the algorithm's prediction. That is why the algorithm was unfair.";
+                {% endif %}
+                feedbackClass = 'correct-message';
+            } else {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "WRONG! To modify the algorithm's prediction, it was sufficient to change the Company sticker. That is why the algorithm was unfair.";
+                {% else %}
+                    feedbackMessage = "WRONG! Company sticker was the only robot part influencing the algorithm's prediction. That is why the algorithm was unfair.";
+                {% endif %}
+                feedbackClass = 'wrong-message';
+            }
+        } else if (robot_url.includes('1')) {
+            if (button == 0) {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "CORRECT! Changing the Company sticker was not needed to modify the algorithm's prediction. That is why the algorithm was fair.";
+                {% else %}
+                feedbackMessage = "CORRECT! Company sticker did not influence the algorithm's prediction. That is why the algorithm was fair.";
+                {% endif %}
+                feedbackClass = 'correct-message';
+            } else {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "WRONG! Changing the Company sticker was not needed to modify the algorithm's prediction. That is why the algorithm was fair.";
+                {% else %}
+                feedbackMessage = "WRONG! Company sticker did not influence the algorithm's prediction. That is why the algorithm was fair.";
+                {% endif %}
+                feedbackClass = 'wrong-message';
+            }
+        } else if (robot_url.includes('2')) {
+            if (button == 1) {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "CORRECT! To modify the algorithm's prediction, it was sufficient to change the Company sticker. That is why the algorithm was unfair.";
+                feedbackClass = 'correct-message';
+                {% else %}
+                    feedbackMessage = "INCONCLUSIVE. The influence of the Company Sticker might be high enough to make the prediction depend on its value. The prediction would then be UNFAIR. But the influence might also not be sufficiently high to make the prediction depend on it. Then, it would be FAIR.";
+                    feedbackClass = 'normal-message';
+                {% endif %}
+            } else {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "WRONG! To modify the algorithm's prediction, it was sufficient to change the Company sticker. That is why the algorithm was unfair.";
+                feedbackClass = 'wrong-message';
+                {% else %}
+                    feedbackMessage = "INCONCLUSIVE. The influence of the Company Sticker might be high enough to make the prediction depend on its value. The prediction would then be UNFAIR. But the influence might also not be sufficiently high to make the prediction depend on it. Then, it would be FAIR.";
+                    feedbackClass = 'normal-message';
+                {% endif %}
+            }
+        } else if (robot_url.includes('3')) {
+            if (button == 1) {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "CORRECT! To modify the algorithm's prediction, it was sufficient to change the Company sticker. Changing other parts was only an alternative. That is why the algorithm was unfair.";
+                feedbackClass = 'correct-message';
+                {% else %}
+                    feedbackMessage = "INCONCLUSIVE. The influence of the Company Sticker might be high enough to make the prediction depend on its value. The prediction would then be UNFAIR. But the influence might also not be sufficiently high to make the prediction depend on it. Then, it would be FAIR.";
+                    feedbackClass = 'normal-message';
+                {% endif %}
+            } else {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "WRONG! To modify change the algorithm's prediction, it was sufficient to change the Company sticker. Changing other parts was only an alternative. That is why the algorithm was unfair.";
+                feedbackClass = 'wrong-message';
+                {% else %}
+                    feedbackMessage = "INCONCLUSIVE. The influence of the Company Sticker might be high enough to make the prediction depend on its value. The prediction would then be UNFAIR. But the influence might also not be sufficiently high to make the prediction depend on it. Then, it would be FAIR.";
+                    feedbackClass = 'normal-message';
+                {% endif %}
+            }
+        {# } else if (robot_url.includes('4')) {#}
+        {#    if (button == 0) {#}
+        {#        feedbackMessage = "This decision in ambiguous and could be unfair or fair. But since changing the Company sticker was not enough to modify the algorithm's prediction, we wil treat it as FAIR.";#}
+        {#        feedbackClass = 'normal-message';#}
+        {#    } else {#}
+        {#        feedbackMessage = "WRONG! Changing the Company sticker alone was not enough to modify the algorithm's prediction, there needed to be more changes done. That is why the algorithm was fair.";#}
+        {#        feedbackClass = 'normal-message';#}
+        {#    }#}
+        } else {
+            if (button == 1) {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "CORRECT! To modify the algorithm's prediction, it was sufficient to change the Company sticker. That is why the algorithm was unfair.";
+                {% else %}
+                    feedbackMessage = "INCONCLUSIVE. The influence of the Company Sticker might be high enough to make the prediction depend on its value. The prediction would then be UNFAIR. But the influence might also not be sufficiently high to make the prediction depend on it. Then, it would be FAIR.";
+                {% endif %}
+                feedbackClass = 'correct-message';
+            } else {
+                {% if params['explanation'] == 'CE' %}
+                feedbackMessage = "WRONG! To modify the algorithm's prediction, it was sufficient to change the Company sticker. That is why the algorithm was unfair.";
+                feedbackClass = 'wrong-message';
+                {% else %}
+                    feedbackMessage = "INCONCLUSIVE. The influence of the Company Sticker might be high enough to make the prediction depend on its value. The prediction would then be UNFAIR. But the influence might also not be sufficiently high to make the prediction depend on it. Then, it would be FAIR.";
+                    feedbackClass = 'correct-message';
+                {% endif %}
+            }
+        }
+
+        feedbackText.textContent = feedbackMessage;
+        feedbackText.className = feedbackClass;
+
+        dialog.close();
+        dialog.showModal();
+        feedbackText.show();
+    }
+
+    function closeFeedbackDialog() {
+        const dialog = document.getElementById('response-dialog');
+        dialog.close();
+        $("form").submit();
+    }
+    </script>
+</div>

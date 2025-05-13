@@ -1,0 +1,57 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+    <script>
+        var closeButtonClicked = false;
+        function end_experiment(name) {
+            state = String(name).valueOf()
+            closeButtonClicked = true;
+            console.log("status", state)
+            if (state == "complete") {
+                next_url = "https://app.prolific.co/submissions/complete?cc=C84MLKND";
+            } else if (state == "incomplete") {
+                next_url = "https://app.prolific.co/submissions/complete?cc=C13IC38A";
+            } else if (state == "rejected") {
+                next_url = "https://app.prolific.co/submissions/complete?cc=CS3Q5JHF";
+            } else {
+                next_url = "https://www.google.com";
+            }
+            window.open('','_parent','');
+            window.opener.location.replace(next_url);
+            window.opener.postMessage('navigated', '*');
+            window.close();
+        }
+    </script>
+</head>
+{{ macros.navigation_bar(page_title = "You're Done!", include_exit = False) }}
+
+<div id="page-content">
+
+    <div class="instructions">
+
+        {% if status == "complete" %}
+            <p>
+                Thanks! Well done! You've marked all the robots NASA had problems with. Your answers were
+                correct in <b>{{ accuracy*100 }}%</b> of the time which gives you the bonus of <p style="text-align: center; color: {% if bonus > 0 %}green
+            {% elif bonus == 0 %}black{% else %}red{% endif %}; font-size: xx-large"><b>{{  "${:.2f}".format(bonus) }}</b>
+            </p>
+        {% elif status == "incomplete" %}
+            <p>We are sorry that you were unable to complete the entire study. Please return the experiment so that someone can take it.</p>
+        {% endif %}
+
+        <p>
+            Click "Finish" to close this window. <b>Do not use the "X" button!</b>
+            The Prolific code will be given to you in the window where you started the experiment.
+        </p>
+
+    </div>
+
+    <hr />
+
+    <div class="center-on-page">
+        <button id="finish" type="button" class="btn btn-primary btn-lg continue" onclick='end_experiment("{{ status }}"); window.clickedNext=true;'>
+            Finish
+        </button>
+    </div>
+
+</div>

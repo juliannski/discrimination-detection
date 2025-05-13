@@ -1,0 +1,47 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Questionnaire') }}
+
+<div id="page-content">
+
+    <div class="instructions">
+
+    <form action="/questionnaire" method="POST" role="form">
+        {% for question in form %}
+              {%  if "png" in question.id %}
+              <div class="question">
+                <h4 style="font-weight: bold">{{ question.label }}</h4>
+                  <div class="imgContainer"><img src='{{ question.id }}' alt="Sth" style='width: 40%; object-fit: contain'/></div>
+              </div>
+              {%  else %}
+              <div class="question">
+                <h4 style="font-weight: bold">{{ question.label }}</h4>
+              </div>
+              {% endif %}
+              {% if question.id == 'likert' %}
+              <div class = "likert" style="width: 50%">
+                {{ question }}
+              </div>
+              {% elif question.id == 'text' %}
+              <div class = "answer" style="padding-left: 4%; width: 150%">
+                {{ question }}
+              </div>
+              {% else %}
+              <div class = "answer">
+                {{ question }}
+              </div>
+              {% endif %}
+              <br>
+        {% endfor %}
+        <center>
+            <input type="submit" value="Submit" class="btn btn-primary btn-lg continue" onclick="window.clickedNext=true;"/>
+        </center>
+    </form>
+
+    </div>
+
+    <hr />
+
+</div>

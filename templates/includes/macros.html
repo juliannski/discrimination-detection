@@ -1,0 +1,303 @@
+{% macro navigation_bar(page_title, include_robot_guide=False, include_exit=True, color="black") -%}
+    <div class="topnav">
+        <span class="page-title" style="color: {{ color }}">{{ page_title }}</span>
+        {% if include_exit %}
+            <button class="btn btn-danger btn-lg right" onClick="leave_experiment()">
+                Exit
+            </button>
+        {% endif %}
+        {% if include_robot_guide %}
+            <button class="btn btn-primary btn-lg btn-anchor right" onClick="toggleRobotGuide(); document.getElementById('robot-guide-clicked').value = true;">
+                Robot Guide
+            </button>
+        {% endif %}
+    </div>
+{%- endmacro %}
+
+
+{% macro print_earnings(value) -%}
+    {% if value > 0 %}
+        <span class='txt-earnings-gain'>
+        {{  "${:.2f}".format(value).replace('$-', '-$')}}</span>
+    {% elif value < 0 %}
+        <span class='txt-earnings-loss'>
+        {{  "${:.2f}".format(value).replace('$-', '-$')}}
+    {% else %}
+        <span class='txt-earnings-null'>
+        {{  "${:.2f}".format(value).replace('$-', '-$')}}</span>
+    </span>
+    {% endif %}
+{%- endmacro %}
+
+
+{% macro print_shap_explanation(feature_importance, mean_val, max_negative, index) -%}
+
+    <div class="shap-model">
+        <div class="shap-wrapper">
+            {% set hght = feature_importance|length * 50 + 100 %}
+            <div class="shap-content" style="height: {{ hght }}px;">
+
+                {% set scale_factor = 75 * (3 / [3, max_negative|abs]|max) %}
+                {% set mean_val_r = -0.5 %}
+                {% set base_x = 345 %}
+                {% set offset_height = 80 %}
+                {% set ns = namespace(current_pos = mean_val_r, shap_sum = 0, x_start = base_x + (mean_val_r * scale_factor)) %}
+
+                <div class="direction-labels" style="left: {{base_x + (mean_val_r * scale_factor) - 161 }}px;">
+                    <span class="label-defective">← Defective</span>
+                    <span class="label-reliable">Reliable →</span>
+                </div>
+
+
+                <div class="mean-line" style="left: {{ ns.x_start }}px; height: calc(100% - {{ offset_height }}px);"></div>
+                <!-- Grid lines -->
+                {% for i in range(-3, 3) %}
+                    {% set x_pos = base_x + ((i+mean_val_r) * scale_factor) + 2 %}
+                    {% if i != 0 and x_pos > 200 and x_pos < 559 %}
+                        <div class="mean-line" style="border-left: 1px dashed #888; left: {{base_x + ((i+mean_val_r) * scale_factor) + 2 }}px; height: calc(100% - {{ offset_height - 12}}px);"></div>
+                    {% endif %}
+                {% endfor %}
+                <!-- X-axis and grid lines -->
+                <div class="x-axis" style="width: calc(100% - 200px); top: calc(30px + 100% - {{ offset_height - 12}}px);">
+                    {% for i in range(-3, 3) %}
+                        {% set x_pos = base_x + ((i+mean_val_r) * scale_factor) - 198 %}
+                        {%  if x_pos > 2 and x_pos < 359 %}
+                            <div class="x-axis-tick" style="left: {{ x_pos }}px;"></div>
+                            <div class="x-axis-grid" style="left: {{ x_pos }}px;"></div>
+                        {% endif %}
+                        {% if i == 0 %}
+                            <div class="x-axis-zero" style="left: {{base_x + ((i+mean_val_r) * scale_factor) - 198 }}px;">0</div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+
+                {% for feature, value, shap in feature_importance|reverse %}
+                    {% set y_pos = 50 + (feature_importance|length - 1 - loop.index0) * 50 %}
+                    {% set bar_x = base_x + (ns.current_pos * scale_factor) %}
+                    {% if shap < 0 %}
+                        {% set ns.x_start = ns.x_start + (shap * scale_factor) %}
+                    {% elif loop.index == 1 %}
+                        {% set ns.x_start = ns.x_start + 4 %}
+                    {% endif %}
+
+
+                    <!-- Feature label -->
+                    <div class="feature-label" style="top: {{y_pos}}px;">
+                        <span class="txt-feature">{{ feature }}</span>
+                        <span class="feature-value">= {{ value }}</span>
+                    </div>
+
+                    <!-- SHAP bar -->
+                    <div class="shap-bar {% if shap < 0 %}shap-bar-negative{% elif shap == 0%}shap-bar-neutral{% else %}shap-bar-positive{% endif %}"
+                         style="top: {{ y_pos }}px;
+                                left: {% if shap != 0 %}{{ ns.x_start }}{% else %}{{ ns.x_start - 10 }}{% endif %}px;
+                                width: {% if shap != 0 %}{{( shap|abs * scale_factor) }}{% else %}20{% endif %}px;">
+                        <span class="shap-value">{{ shap|round(2)|abs }}</span>
+                    </div>
+
+                    {% set ns.current_pos = ns.current_pos + shap %}
+                    {% set ns.shap_sum = ns.shap_sum + shap %}
+                    {% if shap > 0 %}
+                        {% set ns.x_start = ns.x_start + (shap * scale_factor) %}
+                    {% endif %}
+                {% endfor %}
+
+            </div>
+        </div>
+    </div>
+{%- endmacro %}
+
+
+{% macro print_robot_guide(set_a, set_b) -%}
+    <table class="robot-guide" >
+        <tr>
+            <th style="width: 15%;">
+                <span class="txt-x" style="font-weight:bold; font-size: large">Company X</span>
+            </th>
+            {% for robot in set_a %}
+                <td class="robot-record">
+                    <div class="img-no-buttons" style="color: #ffffff; padding:10px;">
+                        {% if robot.outcome_str == "DEFECTIVE" %}
+                        <span-neg>> {{ robot.outcome_str }} </span-neg>
+                        {% else %}
+                        <span-pos>> {{ robot.outcome_str }} </span-pos>
+                        {% endif %}
+                    </div>
+                    <div class="img-robot" style="padding: 10px 15px;">
+                        <img class="img-fluid" style="max-width: 100%" alt="robot_pic"  src="{{ "../" + robot.robot_url }}">
+                    </div>
+                </td>
+            {% endfor %}
+        </tr>
+        <tr>
+            <th style="width: 15%;">
+                <span class="txt-s" style="font-weight:bold; font-size: large">Company S</span>
+            </th>
+            {% for robot in set_b %}
+                <td class="robot-record">
+                    <div class="img-no-buttons" style="color: #ffffff; padding:10px;">
+                        {% if robot.outcome_str == "DEFECTIVE" %}
+                        <span-neg>> {{ robot.outcome_str }} </span-neg>
+                        {% else %}
+                        <span-pos>> {{ robot.outcome_str }} </span-pos>
+                        {% endif %}
+                    </div>
+                    <div class="img-robot" style="padding: 10px 15px;">
+                        <img class="img-fluid" style="max-width: 100%" alt="robot_pic"  src="{{ "../" + robot.robot_url }}">
+                    </div>
+                </td>
+            {% endfor %}
+        </tr>
+    </table>
+{%- endmacro %}
+
+
+{% macro print_robot_guide_reliability(set_a, set_b) -%}
+    <table class="robot-guide" >
+        <tr>
+            <th style="width: 22%;">
+                <span class="txt-less" style="font-weight:bold; font-size: large">Defective</span>
+            </th>
+            {% for robot in set_a %}
+                <td class="robot-record">
+                    <div class="img-robot">
+                        <img class="img-fluid" style="max-width: 100%" alt="robot_pic"  src="{{ "../" + robot.robot_url }}">
+                    </div>
+                </td>
+            {% endfor %}
+        </tr>
+        <tr>
+            <th style="width: 22%;">
+                <span class="txt-more" style="font-weight:bold; font-size: large">Reliable</span>
+            </th>
+            {% for robot in set_b %}
+                <td class="robot-record">
+                    <div class="img-robot">
+                        <img class="img-fluid" style="max-width: 100%" alt="robot_pic"  src="{{ "../" + robot.robot_url }}">
+                    </div>
+                </td>
+            {% endfor %}
+        </tr>
+    </table>
+{%- endmacro %}
+
+
+{% macro score_bar(earnings = earnings, n_correct = n_correct, n_incorrect = n_incorrect, n_abstain = n_abstain) -%}
+    <style>
+        .score-container {
+            display: grid;
+            margin-left: 5%;
+            margin-right: 5%;
+            grid-template-areas: "counters buttons";
+            align-content: space-evenly;
+        }
+
+        .buttons {
+            grid-area: buttons;
+            justify-content: end;
+            align-self: center;
+        }
+
+        .counter-container {
+            box-shadow: 3px 3px 1px #ccc;
+            -webkit-box-shadow: 3px 3px 1px #ccc;
+            -moz-box-shadow: 3px 3px 1px #ccc;
+            overflow: hidden;
+            border: solid 2px rgb(128, 128, 128);
+            border-radius: 1em;
+            background: aliceblue;
+            grid-area: counters;
+            justify-content: start;
+            align-self: center;
+            align-content: stretch;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            grid-template-areas: "balance correct incorrect skipped";
+        }
+
+        .counter {
+            box-shadow: 3px 3px 1px #ccc;
+            -webkit-box-shadow: 3px 3px 1px #ccc;
+            -moz-box-shadow: 3px 3px 1px #ccc;
+            padding-top: 0.3em;
+            border-left: 2px solid rgb(128, 128, 128);
+            justify-content: center;
+            align-self: start;
+            text-align: center;
+            display: grid;
+            font-weight: bold;
+        }
+
+        .counter-label {
+            color: rgb(128, 128, 128);
+            font-weight: bold;
+            justify-content: start;
+            align-self: start;
+        }
+
+        .counter-value {
+            font-size: large;
+            justify-content: end;
+            align-self: end;
+        }
+
+        .counter-balance {
+            overflow: hidden;
+            background: white;
+            grid-area: balance;
+            border-left: none;
+        }
+
+        .counter-correct {
+            color: darkgreen;
+            background-color: lightgreen;
+            grid-area: correct;
+            /* border-left: none; */
+        }
+
+        .counter-incorrect {
+            grid-area: incorrect;
+            color: red;
+            background: #ffa50075;
+        }
+
+        .counter-skipped {
+            background: ghostwhite;
+            color: lightskyblue;
+            grid-area: skipped;
+            color: #828282;
+        }
+
+    </style>
+
+    <div class="topnav" style="padding-top: 8px; padding-bottom: 8px;">
+        <div class="score-container">
+            <div class="counter-container">
+                <div class="counter counter-balance">
+                    <span class="counter-label">Balance</span>
+                    <span class="counter-value">{{ print_earnings(value = earnings) }}</span>
+                </div>
+                <div class="counter counter-correct">
+                    <span class="counter-label">Correct</span>
+                    <span class="counter-value">{{ n_correct }}</span>
+                </div>
+                <div class="counter counter-incorrect">
+                    <span class="counter-label">Incorrect</span>
+                    <span class="counter-value">{{ n_incorrect }}</span>
+                </div>
+                <div class="counter counter-skipped">
+                    <span class="counter-label">Skipped</span>
+                    <span class="counter-value">{{ n_abstain }}</span>
+                </div>
+            </div>
+            <div class="buttons">
+                <button class="btn btn-danger btn-lg right" onClick="leave_experiment()">
+                    Exit
+                </button>
+                <button class="btn btn-primary btn-lg btn-anchor right" onClick="toggleRobotGuide(); document.getElementById('robot-guide-clicked').value = true;">
+                    Robot Guide
+                </button>
+            </div>
+        </div>
+    </div>
+{%- endmacro %}

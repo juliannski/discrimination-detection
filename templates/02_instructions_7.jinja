@@ -1,0 +1,53 @@
+<head>
+    {% include 'includes/header.jinja' %}
+    {% import 'includes/macros.html' as macros %}
+</head>
+{{ macros.navigation_bar(page_title = 'Prediction Fairness') }}
+
+<div id="page-content">
+
+	<div class="instructions">
+
+        <p>
+            NASA has contracted two companies to produce the robots: <b>Company X</b> and <b>Company S</b>. By law NASA
+            must be fair in its business decisions. This means that they should be based only on robot parts, not the
+            Company type.
+        </p>
+
+        <p>
+            To give you a sense of what it means, consider the predictions on pictures where robots have Company stickers on them.
+            <ul>
+            {% if params['explanation'] == 'CE' %}
+            <li> The explanation shows this prediction can be modified <b>by changing the Company sticker</b> alone.</li>
+            <li> It thus suffices for the algorithm that the robot looks as though it was produced by a different company. </li>
+
+            {% else %}
+            <li> The plot below shows the relative influence of each robot part in the image for the algorithm's prediction </li>
+            <li> <b>Company X sticker</b> has a strong influence in favor of the Defective prediction.</li>
+            <li> The influence of the sticker is so high, that if the sticker was changed, and the influence went the opposite direction, it would effectively change the prediction to Reliable</li>
+            {% endif %}
+            <li> In this way, the algorithm's decision is not based on robot parts but <b>Company type -- this is UNFAIR</b>.</li>
+            </ul>
+        </p>
+
+        <p>
+            {% if params['explanation'] == 'CE' %}
+                <div class="imgContainer">
+                    <img src='{{ "../static/images/branding_unfair.png" }}' alt="Unfair decision"
+                         style='width: 75%; padding-top: 10px; padding-bottom: 10px; object-fit: contain'/>
+                </div>
+            {% else %}
+                <div class="imgContainer">
+                    <img src='{{ "../static/images/branding_unfair_shap.png" }}' alt="Unfair decision"
+                         style='width: 85%; padding-top: 10px; padding-bottom: 10px; object-fit: contain'/>
+                </div>
+            {% endif %}
+        </p>
+
+    </div>
+
+    <hr />
+
+    {% include 'includes/next.jinja' %}
+
+</div>
