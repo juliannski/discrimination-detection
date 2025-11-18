@@ -234,7 +234,7 @@ def consent():
 
     if not results["experiment_handled"] and params['sample_CEs']:
             experiment_handle_l, new_params = setup_experiment(params)
-            with open("experiment_handle_app_" + params['proxy_strength'] + "_CE_" + params['CE_method'] + ".pkl", 'wb') as f:
+            with open("results/experiments/experiment_handle_app_" + params['proxy_strength'] + "_CE_" + params['CE_method'] + ".pkl", 'wb') as f:
                 dill.dump(experiment_handle_l, f)
             results['experiment_handled'] = True
 
@@ -244,7 +244,7 @@ def consent():
                                                        random_state=np.random.RandomState(params['seed']))
             params['robot_colors'] = robot_colors
     else:
-        with open("experiment_handle_app_" + params['proxy_strength'] + "_CE_" + params['CE_method'] + ".pkl", 'rb') as f:
+        with open("results/experiments/experiment_handle_app_" + params['proxy_strength'] + "_CE_" + params['CE_method'] + ".pkl", 'rb') as f:
             base_handle = dill.load(f)
             experiment_handle_l = copy.deepcopy(base_handle)
 

@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Discrimination Detection with Explanations"
+abstract: "Code accompanying the paper 'Discrimination Exposed? On the Reliability of Explanations for Discrimination Detection'"
+authors:
+  - family-names: Skirzynski
+    given-names: Julian
+  - family-names: Danks
+    given-names: David
+  - family-names: Ustun
+    given-names: Berk
+date-released: 2025-01-01
+license: MIT
+repository-code: "https://github.com/juliannski/discrimination-detection"
+keywords:
+  - discrimination detection
+  - fairness
+  - explanations
+  - machine learning
+  - algorithmic fairness
+preferred-citation:
+  type: conference-paper
+  title: "Discrimination Exposed? On the Reliability of Explanations for Discrimination Detection"
+  authors:
+    - family-names: Skirzynski
+      given-names: Julian
+    - family-names: Danks
+      given-names: David
+    - family-names: Ustun
+      given-names: Berk
+  year: 2025
+  conference:
+    name: "ACM Conference on Fairness, Accountability, and Transparency"
+    acronym: "FAccT"
